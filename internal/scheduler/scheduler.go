@@ -20,7 +20,7 @@ func (s *Scheduler) Invoke(ctx context.Context, serviceName string, payload []by
 		return nil, err
 	}
 
-	if service.Status != registry.Running || !service.Healthy {
+	if service.Status != registry.StatusRunning || !service.Healthy {
 		logger.Warn("service not running or unhealthy, starting service")
 		if err := s.StartService(ctx, serviceName); err != nil {
 			return nil, err
@@ -52,7 +52,7 @@ func (s *Scheduler) StartService(ctx context.Context, serviceName string) error 
 		return nil
 	}
 
-	if service.Status == registry.Running {
+	if service.Status == registry.StatusRunning {
 		logger.Info("service already running")
 		return nil
 	}
@@ -63,13 +63,13 @@ func (s *Scheduler) StartService(ctx context.Context, serviceName string) error 
 	// For now, let's simulate starting successfully.
 
 	// Update status to Pending while starting
-	s.registry.UpdateStatus(ctx, serviceName, registry.Pending)
+	s.registry.UpdateStatus(ctx, serviceName, registry.StatusPending)
 
 	// TODO: Start container using your container runtime
 	// For MVP, we will simulate immediate start success:
 
 	// Mark service as running and healthy
-	s.registry.UpdateStatus(ctx, serviceName, registry.Running)
+	s.registry.UpdateStatus(ctx, serviceName, registry.StatusRunning)
 	s.registry.UpdateHealth(ctx, serviceName, true)
 
 	logger.Info("service started successfully")
@@ -86,7 +86,7 @@ func (s *Scheduler) StopService(ctx context.Context, serviceName string) error {
 		return nil
 	}
 
-	if service.Status != registry.Running {
+	if service.Status != registry.StatusRunning {
 		logger.Info("service not running")
 		return nil
 	}
@@ -97,13 +97,13 @@ func (s *Scheduler) StopService(ctx context.Context, serviceName string) error {
 	// For now, let's simulate stopping successfully.
 
 	// Update status to Pending while stopping
-	s.registry.UpdateStatus(ctx, serviceName, registry.Pending)
+	s.registry.UpdateStatus(ctx, serviceName, registry.StatusPending)
 
 	// TODO: Stop container using your container runtime
 	// For MVP, we will simulate immediate stop success:
 
 	// Mark service as stopped
-	s.registry.UpdateStatus(ctx, serviceName, registry.Stopped)
+	s.registry.UpdateStatus(ctx, serviceName, registry.StatusStopped)
 
 	logger.Info("service stopped successfully")
 
