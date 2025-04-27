@@ -25,14 +25,13 @@ type SchedulerInterface interface {
 }
 
 type Router struct {
-	client  *http.Client
-	logger  *logrus.Entry
-	headers map[string]string
+	client *http.Client
+	logger *logrus.Entry
 }
 
 type Scheduler struct {
-	registry *registry.ServiceRegistry
-	health   *health.HealthChecker
-	router   *Router
+	registry registry.ServiceRegistryInterface
+	health   health.HealthCheckerInterface
+	router   RouterInterface
 	logger   *logrus.Entry
 }

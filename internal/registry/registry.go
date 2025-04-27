@@ -15,12 +15,16 @@ import (
 
 var registryFile = "registry.yaml"
 
-func NewRegistry(path string, logger *logrus.Entry) ServiceRegistryInterface {
+func NewRegistry(basePort int, logger *logrus.Entry) ServiceRegistryInterface {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		logger.WithError(err).Error("failed to get user home directory")
+	}
 	return &ServiceRegistry{
 		Services: make(map[string]*Service),
-		BasePort: 9000,
+		BasePort: basePort,
 		logger:   logger.WithField("component", "registry"),
-		FilePath: filepath.Join(path, registryFile),
+		FilePath: filepath.Join(home, ".simla", registryFile),
 		mutex:    &sync.RWMutex{},
 	}
 }
@@ -28,7 +32,8 @@ func NewRegistry(path string, logger *logrus.Entry) ServiceRegistryInterface {
 func (r *ServiceRegistry) Load(ctx context.Context) error {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
-	r.logger.Info("loading registry from file")
+	logger := r.logger.WithField("path", r.FilePath)
+	logger.Info("loading registry from file")
 	file, err := os.Open(r.FilePath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -56,13 +61,11 @@ func (r *ServiceRegistry) Load(ctx context.Context) error {
 	if r.Services == nil {
 		r.Services = make(map[string]*Service)
 	}
-	r.logger.Info("loaded registry from file")
+	logger.Info("loaded registry from file")
 	return nil
 }
 
 func (r *ServiceRegistry) Save(ctx context.Context) error {
-	r.mutex.RLock()
-	defer r.mutex.RUnlock()
 	r.logger.Info("saving registry to file")
 	file, err := os.Create(r.FilePath)
 	if err != nil {

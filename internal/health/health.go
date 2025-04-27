@@ -13,7 +13,7 @@ import (
 
 var healthCheckEndpoint = "http://localhost:%d/runtime/invocation/next"
 
-func NewHealthChecker(retryCount int, retryInterval time.Duration, logger *logrus.Entry) HealthCheckerInterface {
+func NewHealthChecker(logger *logrus.Entry) HealthCheckerInterface {
 	return &HealthChecker{
 		client: &http.Client{Timeout: 2 * time.Second},
 		logger: logger.WithField("component", "health"),

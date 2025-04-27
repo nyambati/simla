@@ -5,12 +5,25 @@ import (
 	"fmt"
 
 	simlaerrors "github.com/nyambati/simla/internal/errors"
+	"github.com/nyambati/simla/internal/health"
 	"github.com/nyambati/simla/internal/registry"
+	"github.com/sirupsen/logrus"
 )
 
 var _ SchedulerInterface = (*Scheduler)(nil)
 
 var InvokeEndpoint = "http://localhost:%d/2015-03-31/functions/function/invocations"
+
+func NewScheduler(registry registry.ServiceRegistryInterface, logger *logrus.Entry) SchedulerInterface {
+	router := NewRouter(logger)
+	health := health.NewHealthChecker(logger)
+	return &Scheduler{
+		registry: registry,
+		logger:   logger,
+		health:   health,
+		router:   router,
+	}
+}
 
 func (s *Scheduler) Invoke(ctx context.Context, serviceName string, payload []byte) ([]byte, error) {
 	logger := s.logger.WithField("service", serviceName)

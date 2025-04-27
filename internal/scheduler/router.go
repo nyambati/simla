@@ -12,13 +12,10 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func NewRouter(
-	headers map[string]string,
-	logger *logrus.Logger) RouterInterface {
+func NewRouter(logger *logrus.Entry) RouterInterface {
 	return &Router{
-		client:  &http.Client{Timeout: 10 * time.Second},
-		logger:  logger.WithField("component", "router"),
-		headers: headers,
+		client: &http.Client{Timeout: 10 * time.Second},
+		logger: logger.WithField("component", "router"),
 	}
 }
 
@@ -41,7 +38,7 @@ func (r *Router) SendRequest(
 	// Add headers
 	req.Header.Set("Content-Type", "application/json")
 
-	for k, v := range mergeHeaders(headers, r.headers) {
+	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
 
@@ -54,7 +51,7 @@ func (r *Router) SendRequest(
 		case context.Canceled:
 			return nil, http.StatusRequestTimeout, fmt.Errorf("router: request canceled: %w", ctx.Err())
 		default:
-			return nil, resp.StatusCode, simlaerrors.NewConnectionError(serviceName)
+			return nil, http.StatusInternalServerError, simlaerrors.NewConnectionError(serviceName)
 		}
 	}
 
@@ -75,15 +72,4 @@ func (r *Router) SendRequest(
 	duration := time.Since(startTime)
 	logger.WithField("duration", duration).Info("request completed successfully")
 	return body, resp.StatusCode, nil
-}
-
-func mergeHeaders(headers map[string]string, defaultHeaders map[string]string) map[string]string {
-	result := make(map[string]string, len(defaultHeaders)+len(headers))
-	for k, v := range headers {
-		result[k] = v
-	}
-	for k, v := range defaultHeaders {
-		result[k] = v
-	}
-	return result
 }
