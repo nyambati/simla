@@ -25,7 +25,7 @@ const (
 	OS           = "linux"
 )
 
-func NewRuntime(config *RuntimeConfig, logger *logrus.Logger) (RuntimeInterface, error) {
+func NewRuntime(config *RuntimeConfig, logger *logrus.Entry) (RuntimeInterface, error) {
 	client, err := client.NewClientWithOpts(client.FromEnv)
 	if err != nil {
 		return nil, err

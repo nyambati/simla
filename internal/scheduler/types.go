@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/nyambati/simla/internal/config"
 	"github.com/nyambati/simla/internal/health"
 	"github.com/nyambati/simla/internal/registry"
 	"github.com/sirupsen/logrus"
@@ -34,4 +35,5 @@ type Scheduler struct {
 	health   health.HealthCheckerInterface
 	router   RouterInterface
 	logger   *logrus.Entry
+	config   *config.Config
 }

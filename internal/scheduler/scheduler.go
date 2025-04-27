@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/nyambati/simla/internal/config"
 	simlaerrors "github.com/nyambati/simla/internal/errors"
 	"github.com/nyambati/simla/internal/health"
 	"github.com/nyambati/simla/internal/registry"
+	"github.com/nyambati/simla/internal/runtime"
 	"github.com/sirupsen/logrus"
 )
 
@@ -14,7 +16,7 @@ var _ SchedulerInterface = (*Scheduler)(nil)
 
 var InvokeEndpoint = "http://localhost:%d/2015-03-31/functions/function/invocations"
 
-func NewScheduler(registry registry.ServiceRegistryInterface, logger *logrus.Entry) SchedulerInterface {
+func NewScheduler(config *config.Config, registry registry.ServiceRegistryInterface, logger *logrus.Entry) SchedulerInterface {
 	router := NewRouter(logger)
 	health := health.NewHealthChecker(logger)
 	return &Scheduler{
@@ -22,6 +24,7 @@ func NewScheduler(registry registry.ServiceRegistryInterface, logger *logrus.Ent
 		logger:   logger,
 		health:   health,
 		router:   router,
+		config:   config,
 	}
 }
 
@@ -72,18 +75,47 @@ func (s *Scheduler) StartService(ctx context.Context, serviceName string) error 
 
 	logger.Info("starting service container")
 
-	// TODO: Here you would normally trigger the container runtime (Docker API)
-	// For now, let's simulate starting successfully.
+	svcCfg, exists := s.config.GetService(ctx, serviceName)
+	if !exists {
+		return simlaerrors.NewServiceNotFoundError(serviceName)
+	}
 
-	// Update status to Pending while starting
-	s.registry.UpdateStatus(ctx, serviceName, registry.StatusPending)
+	runtimeConfig := &runtime.RuntimeConfig{
+		Name:         serviceName,
+		Runtime:      svcCfg.Runtime,
+		Image:        svcCfg.Image,
+		Architecture: svcCfg.Architecture,
+		CodePath:     svcCfg.CodePath,
+		Cmd:          svcCfg.Cmd,
+		Entrypoint:   svcCfg.Entrypoint,
+		Environment:  svcCfg.Environment,
+		Port:         fmt.Sprintf("%d", service.Port),
+	}
 
-	// TODO: Start container using your container runtime
-	// For MVP, we will simulate immediate start success:
+	runtime, err := runtime.NewRuntime(runtimeConfig, s.logger)
+	if err != nil {
+		return err
+	}
+
+	containerID, err := runtime.StartContainer(ctx)
+	if err != nil {
+		s.registry.UpdateStatus(ctx, serviceName, registry.StatusFailed)
+		return err
+	}
+
+	if err := s.health.WaitForHealthy(ctx, service); err != nil {
+		s.registry.UpdateStatus(ctx, serviceName, registry.StatusFailed)
+		return err
+	}
 
 	// Mark service as running and healthy
 	s.registry.UpdateStatus(ctx, serviceName, registry.StatusRunning)
 	s.registry.UpdateHealth(ctx, serviceName, true)
+
+	// Update container ID
+	if err := s.registry.UpdateContainerID(ctx, serviceName, containerID); err != nil {
+		return err
+	}
 
 	logger.Info("service started successfully")
 

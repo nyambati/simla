@@ -15,17 +15,18 @@ import (
 
 var registryFile = "registry.yaml"
 
-func NewRegistry(basePort int, logger *logrus.Entry) ServiceRegistryInterface {
+func NewRegistry(logger *logrus.Entry) ServiceRegistryInterface {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		logger.WithError(err).Error("failed to get user home directory")
 	}
 	return &ServiceRegistry{
-		Services: make(map[string]*Service),
-		BasePort: basePort,
-		logger:   logger.WithField("component", "registry"),
-		FilePath: filepath.Join(home, ".simla", registryFile),
-		mutex:    &sync.RWMutex{},
+		Services:          make(map[string]*Service),
+		BasePort:          9000,
+		LastAllocatedPort: 9000 - 1,
+		logger:            logger.WithField("component", "registry"),
+		FilePath:          filepath.Join(home, ".simla", registryFile),
+		mutex:             &sync.RWMutex{},
 	}
 }
 
@@ -54,7 +55,6 @@ func (r *ServiceRegistry) Load(ctx context.Context) error {
 		return simlaerrors.NewRegistryLoadError(err.Error())
 	}
 
-	r.BasePort = temp.BasePort
 	r.LastAllocatedPort = temp.LastAllocatedPort
 	r.Services = temp.Services
 

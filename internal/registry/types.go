@@ -18,7 +18,6 @@ const (
 )
 
 type Service struct {
-	Name         string    `yaml:"name"`
 	ID           string    `yaml:"id"`
 	Port         int       `yaml:"port"`
 	Status       Status    `yaml:"-"`
@@ -32,8 +31,8 @@ type ServiceRegistry struct {
 	LastAllocatedPort int                 `yaml:"lastAllocatedPort"`
 	Services          map[string]*Service `yaml:"services"`
 	FilePath          string              `yaml:"-"`
-	logger            *logrus.Entry
-	mutex             *sync.RWMutex
+	logger            *logrus.Entry       `yaml:"-"`
+	mutex             *sync.RWMutex       `yaml:"-"`
 }
 
 type ServiceRegistryInterface interface {
