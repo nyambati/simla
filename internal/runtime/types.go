@@ -1,0 +1,32 @@
+package runtime
+
+import (
+	"context"
+
+	"github.com/docker/docker/client"
+	"github.com/sirupsen/logrus"
+)
+
+type Runtime struct {
+	client *client.Client
+	config *RuntimeConfig
+	logger *logrus.Entry
+}
+
+type RuntimeConfig struct {
+	Name         string
+	Runtime      string
+	Image        string
+	Architecture string
+	CodePath     string
+	Cmd          []string
+	Entrypoint   []string
+	Environment  map[string]string
+	Port         string
+}
+
+type RuntimeInterface interface {
+	StartContainer(ctx context.Context) (containerID string, err error)
+	StopContainer(ctx context.Context, containerID string) error
+	DeleteContainer(ctx context.Context, containerID string) error
+}

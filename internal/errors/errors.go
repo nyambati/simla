@@ -77,3 +77,16 @@ func NewHeathCheckFailedError(name string, reason string) error {
 func (e *HealthCheckFailedError) Error() string {
 	return fmt.Sprintf("health check failed for service %s: reason = %s", e.ServiceName, e.Reason)
 }
+
+// Runtime errors
+type RuntimeConfigError struct {
+	Reason string
+}
+
+func (e *RuntimeConfigError) Error() string {
+	return fmt.Sprintf("invalid runtime config: reason = %s", e.Reason)
+}
+
+func NewRuntimeConfigError(reason string) error {
+	return &RuntimeConfigError{Reason: reason}
+}
