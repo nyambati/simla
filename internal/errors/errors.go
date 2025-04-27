@@ -90,3 +90,28 @@ func (e *RuntimeConfigError) Error() string {
 func NewRuntimeConfigError(reason string) error {
 	return &RuntimeConfigError{Reason: reason}
 }
+
+// Registry errors
+type RegistryLoadError struct {
+	Reason string
+}
+
+func (e *RegistryLoadError) Error() string {
+	return fmt.Sprintf("failed to load registry: reason = %s", e.Reason)
+}
+
+func NewRegistryLoadError(reason string) error {
+	return &RegistryLoadError{Reason: reason}
+}
+
+type RegistrySaveError struct {
+	Reason string
+}
+
+func (e *RegistrySaveError) Error() string {
+	return fmt.Sprintf("failed to save registry: reason = %s", e.Reason)
+}
+
+func NewRegistrySaveError(reason string) error {
+	return &RegistrySaveError{Reason: reason}
+}
