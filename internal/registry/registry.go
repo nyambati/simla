@@ -33,8 +33,10 @@ func NewRegistry(logger *logrus.Entry) ServiceRegistryInterface {
 func (r *ServiceRegistry) Load(ctx context.Context) error {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
+
 	logger := r.logger.WithField("path", r.FilePath)
 	logger.Info("loading registry from file")
+
 	file, err := os.Open(r.FilePath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -46,6 +48,7 @@ func (r *ServiceRegistry) Load(ctx context.Context) error {
 		}
 		return simlaerrors.NewRegistryLoadError(err.Error())
 	}
+
 	defer file.Close()
 
 	decoder := yaml.NewDecoder(file)
@@ -61,12 +64,14 @@ func (r *ServiceRegistry) Load(ctx context.Context) error {
 	if r.Services == nil {
 		r.Services = make(map[string]*Service)
 	}
+
 	logger.Info("loaded registry from file")
 	return nil
 }
 
 func (r *ServiceRegistry) Save(ctx context.Context) error {
 	r.logger.Info("saving registry to file")
+
 	file, err := os.Create(r.FilePath)
 	if err != nil {
 		return simlaerrors.NewRegistrySaveError(err.Error())
@@ -81,6 +86,7 @@ func (r *ServiceRegistry) Save(ctx context.Context) error {
 	if err := encoder.Encode(r); err != nil {
 		return simlaerrors.NewRegistrySaveError(err.Error())
 	}
+
 	r.logger.Info("saved registry to file")
 	return nil
 }
@@ -90,15 +96,19 @@ func (r *ServiceRegistry) AddService(ctx context.Context, serviceName string) (s
 	defer r.mutex.Unlock()
 
 	r.logger.Infof("adding service %s to registry", serviceName)
+
 	port, err := r.allocateServicePort(ctx, serviceName)
 	if err != nil {
 		return nil, err
 	}
+
 	svc = &Service{Port: port, Status: StatusPending}
 	r.Services[serviceName] = svc
+
 	if err := r.Save(ctx); err != nil {
 		return nil, err
 	}
+
 	return svc, nil
 }
 

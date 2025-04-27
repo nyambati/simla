@@ -19,6 +19,7 @@ type Route struct {
 type APIGateway struct {
 	Port   string  `yaml:"port"`
 	Routes []Route `yaml:"routes"`
+	Stage  string  `yaml:"stage"`
 }
 
 type Config struct {

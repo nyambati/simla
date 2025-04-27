@@ -23,6 +23,7 @@ import (
 const (
 	InternalPort = "8080"
 	OS           = "linux"
+	NetworkName  = "simla-network"
 )
 
 func NewRuntime(config *RuntimeConfig, logger *logrus.Entry) (RuntimeInterface, error) {
@@ -132,7 +133,17 @@ func (r *Runtime) createContainer(ctx context.Context) (string, error) {
 		},
 	}
 
-	networkingConfig := &network.NetworkingConfig{}
+	if err := r.createNetwork(ctx); err != nil {
+		return "", fmt.Errorf("failed to create network: %w", err)
+	}
+
+	networkingConfig := &network.NetworkingConfig{
+		EndpointsConfig: map[string]*network.EndpointSettings{
+			NetworkName: {
+				NetworkID: NetworkName,
+			},
+		},
+	}
 
 	resp, err := r.client.ContainerCreate(
 		ctx,
@@ -169,6 +180,29 @@ func formatEnvVars(env map[string]string) []string {
 		variables = append(variables, fmt.Sprintf("%s=%s", key, value))
 	}
 	return variables
+}
+
+func (r *Runtime) createNetwork(ctx context.Context) error {
+	// check if network exists
+	networks, err := r.client.NetworkList(ctx, network.ListOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to list networks: %w", err)
+	}
+
+	for _, network := range networks {
+		if network.Name == NetworkName {
+			return nil
+		}
+	}
+
+	// create network if not found
+	_, err = r.client.NetworkCreate(ctx, NetworkName, network.CreateOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to create network: %w", err)
+	}
+
+	r.logger.WithField("network", NetworkName).Info("network created successfully")
+	return nil
 }
 
 // startContainer starts a container with the given ID.

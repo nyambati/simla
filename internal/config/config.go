@@ -7,13 +7,16 @@ import (
 	"github.com/spf13/viper"
 )
 
-var Simla *Config
-
 func NewConfig() (*Config, error) {
-	config := &Config{
+	var config = &Config{
 		Host:     "127.0.0.1",
 		Services: make(map[string]Service),
+		APIGateway: APIGateway{
+			Port:  "8080",
+			Stage: "v1",
+		},
 	}
+
 	viper.AddConfigPath(".")
 	viper.SetConfigName(".simla")
 	viper.SetConfigType("yaml")

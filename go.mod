@@ -5,8 +5,10 @@ go 1.23.0
 toolchain go1.23.8
 
 require (
+	github.com/aws/aws-lambda-go v1.48.0
 	github.com/docker/docker v28.1.1+incompatible
 	github.com/docker/go-connections v0.5.0
+	github.com/gorilla/mux v1.8.1
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/viper v1.20.1
