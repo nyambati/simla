@@ -13,6 +13,7 @@ import (
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
+	"github.com/docker/docker/errdefs"
 	"github.com/docker/go-connections/nat"
 	simlaerrors "github.com/nyambati/simla/internal/errors"
 	v1 "github.com/opencontainers/image-spec/specs-go/v1"
@@ -42,6 +43,12 @@ func NewRuntime(config *RuntimeConfig, logger *logrus.Logger) (RuntimeInterface,
 func (r *Runtime) StartContainer(ctx context.Context) (containerID string, err error) {
 	if err = r.pullImage(ctx); err != nil {
 		return "", fmt.Errorf("pulling image failed: %w", err)
+	}
+
+	if service, exists := r.registry.GetService(ctx, r.config.Name); exists {
+		if service.ID != "" {
+			_ = r.DeleteContainer(ctx, service.ID)
+		}
 	}
 
 	containerID, err = r.createContainer(ctx)
@@ -197,6 +204,11 @@ func (r *Runtime) StopContainer(ctx context.Context, containerID string) error {
 	if err := r.client.ContainerStop(ctx, containerID, container.StopOptions{
 		Timeout: &stopTimeout,
 	}); err != nil {
+		// Gracefully ignore if container not found
+		if errdefs.IsNotFound(err) {
+			r.logger.WithField("container_id", containerID).Warn("container not found, ignoring stop")
+			return nil
+		}
 		return fmt.Errorf("failed to stop container: %w", err)
 	}
 
@@ -213,6 +225,10 @@ func (r *Runtime) StopContainer(ctx context.Context, containerID string) error {
 // If the operation fails, it returns an error with the message "failed to stop container: <error>".
 
 func (r *Runtime) DeleteContainer(ctx context.Context, containerID string) error {
+	if err := r.StopContainer(ctx, containerID); err != nil {
+		return err
+	}
+
 	logger := r.logger.WithField("container_id", containerID)
 	logger.Info("deleting container")
 
@@ -222,6 +238,11 @@ func (r *Runtime) DeleteContainer(ctx context.Context, containerID string) error
 		RemoveLinks:   true,
 	})
 	if err != nil {
+		// Gracefully ignore if container not found
+		if errdefs.IsNotFound(err) {
+			logger.Warn("container not found, ignoring delete")
+			return nil
+		}
 		return fmt.Errorf("failed to stop container: %w", err)
 	}
 

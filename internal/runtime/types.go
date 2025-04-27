@@ -4,13 +4,15 @@ import (
 	"context"
 
 	"github.com/docker/docker/client"
+	"github.com/nyambati/simla/internal/registry"
 	"github.com/sirupsen/logrus"
 )
 
 type Runtime struct {
-	client *client.Client
-	config *RuntimeConfig
-	logger *logrus.Entry
+	client   *client.Client
+	config   *RuntimeConfig
+	registry *registry.ServiceRegistry
+	logger   *logrus.Entry
 }
 
 type RuntimeConfig struct {
