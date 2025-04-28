@@ -1,3 +1,4 @@
+//go:generate mockgen -source=$GOFILE -destination=../mocks/mock_registry.go -package=mocks ServiceRegistryInterface
 package registry
 
 import (

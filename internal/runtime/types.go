@@ -10,8 +10,7 @@ import (
 
 type Runtime struct {
 	client   *client.Client
-	config   *RuntimeConfig
-	registry *registry.ServiceRegistry
+	registry registry.ServiceRegistryInterface
 	logger   *logrus.Entry
 }
 
@@ -28,7 +27,7 @@ type RuntimeConfig struct {
 }
 
 type RuntimeInterface interface {
-	StartContainer(ctx context.Context) (containerID string, err error)
+	StartContainer(ctx context.Context, config *RuntimeConfig) (containerID string, err error)
 	StopContainer(ctx context.Context, containerID string) error
 	DeleteContainer(ctx context.Context, containerID string) error
 }

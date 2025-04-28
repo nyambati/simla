@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	simlaerrors "github.com/nyambati/simla/internal/errors"
@@ -11,12 +12,13 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-var healthCheckEndpoint = "http://localhost:%d/runtime/invocation/next"
+var healthCheckEndpoint = "http://localhost:%s/2015-03-31/functions/function/invocations"
 
 func NewHealthChecker(logger *logrus.Entry) HealthCheckerInterface {
 	return &HealthChecker{
-		client: &http.Client{Timeout: 2 * time.Second},
-		logger: logger.WithField("component", "health"),
+		client:  &http.Client{Timeout: 5 * time.Second},
+		logger:  logger.WithField("component", "health"),
+		timeout: 30 * time.Second,
 	}
 }
 
@@ -25,9 +27,10 @@ func (hc *HealthChecker) IsHealthy(ctx context.Context, svc *registry.Service) (
 	if !ok {
 		return false, simlaerrors.NewHeathCheckFailedError("unknown", "service name not found in context")
 	}
-	log := hc.logger.WithField("service", serviceName)
-	url := fmt.Sprintf(healthCheckEndpoint, svc.Port)
 
+	url := fmt.Sprintf(healthCheckEndpoint, strconv.Itoa(svc.Port))
+	log := hc.logger.WithFields(logrus.Fields{"service": serviceName, "url": url})
+	log.Info("performing health check")
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return false, simlaerrors.NewHeathCheckFailedError(serviceName, err.Error())

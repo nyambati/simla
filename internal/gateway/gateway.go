@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"path/filepath"
 	"time"
 
 	"github.com/aws/aws-lambda-go/events"
@@ -30,9 +31,19 @@ func NewAPIGateway(config *config.Config, registry registry.ServiceRegistryInter
 
 func (g *APIGateway) Start(ctx context.Context) error {
 	g.logger.Infof("starting gateway on port %s", g.config.Port)
-	g.router.HandleFunc(formatRoutePath(g.config.Stage, "health"), g.handleHealthCheck()).Methods(http.MethodGet)
+	g.router.HandleFunc(filepath.Join("/", g.config.Stage, "/health"), g.handleHealthCheck()).Methods(http.MethodGet)
 	g.router.Use(g.loggingMiddleware)
-	g.RegisterRoutes()
+
+	for _, route := range g.config.Routes {
+		rPath := filepath.Join("/", g.config.Stage, route.Path)
+		fields := logrus.Fields{
+			"method":  route.Method,
+			"path":    rPath,
+			"service": route.Service,
+		}
+		g.logger.WithFields(fields).Info("registering route")
+		g.router.Methods(route.Method).Path(rPath).HandlerFunc(g.handleRequest(route))
+	}
 	return g.createHttpServer(ctx)
 }
 
@@ -188,16 +199,4 @@ func (g *APIGateway) loggingMiddleware(next http.Handler) http.Handler {
 
 func formatRoutePath(stage, routePath string) string {
 	return fmt.Sprintf("%s/%s", stage, routePath)
-}
-
-func (g *APIGateway) RegisterRoutes() {
-	for _, route := range g.config.Routes {
-		fields := logrus.Fields{
-			"method":  route.Method,
-			"path":    route.Path,
-			"service": route.Service,
-		}
-		g.logger.WithFields(fields).Info("registering route")
-		g.router.Methods(route.Method).Path(formatRoutePath(g.config.Stage, route.Path)).HandlerFunc(g.handleRequest(route))
-	}
 }

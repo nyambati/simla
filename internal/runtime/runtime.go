@@ -15,7 +15,9 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/errdefs"
 	"github.com/docker/go-connections/nat"
+	"github.com/google/uuid"
 	simlaerrors "github.com/nyambati/simla/internal/errors"
+	"github.com/nyambati/simla/internal/registry"
 	v1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/sirupsen/logrus"
 )
@@ -26,33 +28,36 @@ const (
 	NetworkName  = "simla-network"
 )
 
-func NewRuntime(config *RuntimeConfig, logger *logrus.Entry) (RuntimeInterface, error) {
-	client, err := client.NewClientWithOpts(client.FromEnv)
+func NewRuntime(registry registry.ServiceRegistryInterface, logger *logrus.Entry) (RuntimeInterface, error) {
+	client, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
 		return nil, err
 	}
 	return &Runtime{
-		config: config,
-		client: client,
-		logger: logger.WithField("component", "runtime"),
+		client:   client,
+		registry: registry,
+		logger:   logger.WithField("component", "runtime"),
 	}, nil
 }
 
 // StartContainer creates a new container for the runtime configuration and starts it.
 // It pulls the required Docker image, creates a new container, and starts it.
 // It returns the container ID or an error if any part of the process fails.
-func (r *Runtime) StartContainer(ctx context.Context) (containerID string, err error) {
-	if err = r.pullImage(ctx); err != nil {
+func (r *Runtime) StartContainer(ctx context.Context, config *RuntimeConfig) (containerID string, err error) {
+
+	if config.Image == "" && config.Runtime == "" {
+		return "", fmt.Errorf("image or runtime must be specified")
+	}
+
+	if config.Image == "" && config.Runtime != "" {
+		config.Image = inferImageFromRuntime(config.Runtime)
+	}
+
+	if err = r.pullImage(ctx, config.Image, config.Architecture); err != nil {
 		return "", fmt.Errorf("pulling image failed: %w", err)
 	}
 
-	if service, exists := r.registry.GetService(ctx, r.config.Name); exists {
-		if service.ID != "" {
-			_ = r.DeleteContainer(ctx, service.ID)
-		}
-	}
-
-	containerID, err = r.createContainer(ctx)
+	containerID, err = r.createContainer(ctx, config)
 	if err != nil {
 		return "", fmt.Errorf("creating container failed: %w", err)
 	}
@@ -66,13 +71,13 @@ func (r *Runtime) StartContainer(ctx context.Context) (containerID string, err e
 
 // helper functions
 
-func (r *Runtime) pullImage(ctx context.Context) error {
-	r.config.Image = strings.TrimSpace(r.config.Image)
-	if r.config.Image == "" {
+func (r *Runtime) pullImage(ctx context.Context, imageName, arch string) error {
+	imageName = strings.TrimSpace(imageName)
+	if imageName == "" {
 		return simlaerrors.NewRuntimeConfigError("image field is empty")
 	}
 
-	logger := r.logger.WithField("image", r.config.Image)
+	logger := r.logger.WithField("image", imageName)
 	// First, check if image already exists
 	images, err := r.client.ImageList(ctx, image.ListOptions{})
 	if err != nil {
@@ -80,39 +85,47 @@ func (r *Runtime) pullImage(ctx context.Context) error {
 	}
 
 	for _, image := range images {
-		if slices.Contains(image.RepoTags, r.config.Image) {
+		if slices.Contains(image.RepoTags, imageName) {
 			return nil
 		}
 	}
 
 	// Pull image if not found
-	reader, err := r.client.ImagePull(ctx, r.config.Image, image.PullOptions{
-		Platform: fmt.Sprintf("%s/%s", OS, r.config.Architecture),
+	reader, err := r.client.ImagePull(ctx, imageName, image.PullOptions{
+		Platform: fmt.Sprintf("%s/%s", OS, arch),
 	})
 	if err != nil {
-		return fmt.Errorf("failed to pull image %s: %w", r.config.Image, err)
+		return fmt.Errorf("failed to pull image %s: %w", imageName, err)
 	}
 
 	defer reader.Close()
 
 	// Drain output (Docker API requires this)
 	_, _ = io.Copy(io.Discard, reader)
-	logger.WithField("image", r.config.Image).Info("image pulled successfully")
+	logger.WithField("image", imageName).Info("image pulled successfully")
 	return nil
 }
 
-func (r *Runtime) createContainer(ctx context.Context) (string, error) {
-	absCodePath, err := filepath.Abs(r.config.CodePath)
+func (r *Runtime) createContainer(ctx context.Context, config *RuntimeConfig) (string, error) {
+	r.logger.Info("checking for dangling containers")
+	if err := r.CleanContainerEnvironment(ctx, config.Name); err != nil {
+		return "", fmt.Errorf("failed to clean container environment: %w", err)
+	}
+
+	absCodePath, err := filepath.Abs(config.CodePath)
 	if err != nil {
 		return "", fmt.Errorf("failed to resolve code path: %w", err)
 	}
 
+	containerName := fmt.Sprintf("%s-%s", config.Name, uuid.NewString())
+
 	containerConfig := &container.Config{
-		Image:        r.config.Image,
-		Cmd:          r.config.Cmd,
-		Entrypoint:   r.config.Entrypoint,
-		Env:          formatEnvVars(r.config.Environment),
+		Image:        config.Image,
+		Cmd:          config.Cmd,
+		Entrypoint:   config.Entrypoint,
+		Env:          formatEnvVars(config.Environment),
 		ExposedPorts: nat.PortSet{nat.Port("8080/tcp"): struct{}{}},
+		Labels:       map[string]string{"simla": "true"},
 	}
 
 	hostConfig := &container.HostConfig{
@@ -127,7 +140,7 @@ func (r *Runtime) createContainer(ctx context.Context) (string, error) {
 			nat.Port(InternalPort + "/tcp"): []nat.PortBinding{
 				{
 					HostIP:   "0.0.0.0",
-					HostPort: r.config.Port,
+					HostPort: config.Port,
 				},
 			},
 		},
@@ -150,8 +163,8 @@ func (r *Runtime) createContainer(ctx context.Context) (string, error) {
 		containerConfig,
 		hostConfig,
 		networkingConfig,
-		toV1Platform(r.config.Architecture),
-		r.config.Name,
+		toV1Platform(config.Architecture),
+		containerName,
 	)
 	if err != nil {
 		return "", fmt.Errorf("failed to create container: %w", err)
@@ -259,17 +272,11 @@ func (r *Runtime) StopContainer(ctx context.Context, containerID string) error {
 // If the operation fails, it returns an error with the message "failed to stop container: <error>".
 
 func (r *Runtime) DeleteContainer(ctx context.Context, containerID string) error {
-	if err := r.StopContainer(ctx, containerID); err != nil {
-		return err
-	}
-
 	logger := r.logger.WithField("container_id", containerID)
 	logger.Info("deleting container")
 
 	err := r.client.ContainerRemove(ctx, containerID, container.RemoveOptions{
-		RemoveVolumes: true,
-		Force:         true,
-		RemoveLinks:   true,
+		Force: true,
 	})
 	if err != nil {
 		// Gracefully ignore if container not found
@@ -281,5 +288,30 @@ func (r *Runtime) DeleteContainer(ctx context.Context, containerID string) error
 	}
 
 	logger.Info("container stopped successfully")
+	return nil
+}
+
+func inferImageFromRuntime(runtime string) string {
+	base := "public.ecr.aws/lambda/%s:latest"
+	return fmt.Sprintf(base, runtime)
+}
+
+func (r *Runtime) CleanContainerEnvironment(ctx context.Context, serviceName string) error {
+	summary, err := r.client.ContainerList(ctx, container.ListOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to list containers: %w", err)
+	}
+
+	for _, container := range summary {
+		r.logger.Info(container)
+		if strings.Contains(container.Names[0], serviceName) {
+			r.logger.Info("deleting container")
+			r.logger.Info("deleting container")
+			if err := r.DeleteContainer(ctx, container.ID); err != nil {
+				return fmt.Errorf("failed to delete container %s: %w", container.ID, err)
+			}
+		}
+	}
+
 	return nil
 }

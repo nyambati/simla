@@ -21,24 +21,24 @@ func TestRouter(t *testing.T) {
 		path       string
 		statusCode int
 		expected   string
-		err        bool
+		wantErr    bool
 	}{
 		{
 			name:       "TestValidRouteWithSuccessfulResponse",
 			statusCode: 200,
 			expected:   string(payload),
-			err:        false,
+			wantErr:    false,
 		},
 		{
 			name:       "TestValidRouteWithFailedResponse",
 			statusCode: 500,
-			err:        true,
+			wantErr:    true,
 		},
 		{
 			name:       "TestInvalidRoute",
 			path:       "/invalid",
 			statusCode: 500,
-			err:        true,
+			wantErr:    true,
 		},
 	}
 
@@ -62,7 +62,7 @@ func TestRouter(t *testing.T) {
 			headers := map[string]string{}
 
 			payload, statusCode, err := router.SendRequest(ctx, url, headers, payload)
-			if err != nil && !tt.err {
+			if err != nil && !tt.wantErr {
 				t.Errorf("expected no error, got=%v", err)
 			}
 

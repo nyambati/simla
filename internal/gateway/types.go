@@ -11,7 +11,6 @@ import (
 
 type GatewayInterface interface {
 	Start(ctx context.Context) error
-	RegisterRoutes()
 }
 
 type APIGateway struct {
