@@ -287,7 +287,7 @@ func (r *Runtime) DeleteContainer(ctx context.Context, containerID string) error
 		return fmt.Errorf("failed to stop container: %w", err)
 	}
 
-	logger.Info("container stopped successfully")
+	logger.Info("container deleted successfully")
 	return nil
 }
 
@@ -303,10 +303,7 @@ func (r *Runtime) CleanContainerEnvironment(ctx context.Context, serviceName str
 	}
 
 	for _, container := range summary {
-		r.logger.Info(container)
 		if strings.Contains(container.Names[0], serviceName) {
-			r.logger.Info("deleting container")
-			r.logger.Info("deleting container")
 			if err := r.DeleteContainer(ctx, container.ID); err != nil {
 				return fmt.Errorf("failed to delete container %s: %w", container.ID, err)
 			}

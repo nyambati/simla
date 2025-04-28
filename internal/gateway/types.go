@@ -1,3 +1,5 @@
+//go:generate mockgen -source=$GOFILE -destination=../mocks/mock_gateway.go -package=mocks GatewayInterface
+
 package gateway
 
 import (

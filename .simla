@@ -1,0 +1,15 @@
+apiGateway:
+  scheme: http
+  port: 8080
+  routes:
+    - path: payments
+      method: GET
+      service: payments
+Services:
+    payments:
+      architecture: amd64
+      environment:
+        TEST_ENV: test
+      codePath: ./bin
+      runtime: go
+      cmd: ["main"]

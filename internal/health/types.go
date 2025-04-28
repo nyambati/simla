@@ -1,3 +1,5 @@
+//go:generate mockgen -source=$GOFILE -destination=../mocks/mock_health.go -package=mocks HealthCheckerInterface
+
 package health
 
 import (

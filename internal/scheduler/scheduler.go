@@ -55,7 +55,7 @@ func (s *Scheduler) Invoke(ctx context.Context, serviceName string, payload []by
 	}
 
 	url := fmt.Sprintf(InvokeHost, service.Port, InvokeEndpoint)
-	fmt.Println("url", url)
+
 	// Set service name into context for Router
 	ctx = context.WithValue(ctx, "service", serviceName)
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)

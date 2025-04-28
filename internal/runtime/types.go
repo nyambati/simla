@@ -1,3 +1,4 @@
+//go:generate mockgen -source=$GOFILE -destination=../mocks/mock_runtime.go -package=mocks RuntimeInterface
 package runtime
 
 import (
