@@ -13,6 +13,7 @@ import (
 	context "context"
 	io "io"
 	reflect "reflect"
+	time "time"
 
 	runtime "github.com/nyambati/simla/internal/runtime"
 	gomock "go.uber.org/mock/gomock"
@@ -98,4 +99,16 @@ func (m *MockRuntimeInterface) StopContainer(ctx context.Context, containerID st
 func (mr *MockRuntimeInterfaceMockRecorder) StopContainer(ctx, containerID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StopContainer", reflect.TypeOf((*MockRuntimeInterface)(nil).StopContainer), ctx, containerID)
+}
+
+// StreamStartupLogs mocks base method.
+func (m *MockRuntimeInterface) StreamStartupLogs(ctx context.Context, containerID string, window time.Duration) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "StreamStartupLogs", ctx, containerID, window)
+}
+
+// StreamStartupLogs indicates an expected call of StreamStartupLogs.
+func (mr *MockRuntimeInterfaceMockRecorder) StreamStartupLogs(ctx, containerID, window any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StreamStartupLogs", reflect.TypeOf((*MockRuntimeInterface)(nil).StreamStartupLogs), ctx, containerID, window)
 }

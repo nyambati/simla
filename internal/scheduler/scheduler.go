@@ -119,9 +119,16 @@ func (s *Scheduler) StartService(ctx context.Context, serviceName string) error 
 	}
 
 	if err := s.health.WaitForHealthy(ctx, service); err != nil {
+		// Surface any startup logs before returning the error so the developer
+		// can see why the container failed to become healthy.
+		runtime.StreamStartupLogs(ctx, containerID, 3*time.Second)
 		s.registry.UpdateStatus(ctx, serviceName, registry.StatusFailed)
 		return err
 	}
+
+	// Stream the first few seconds of startup logs so startup messages are
+	// visible in the terminal without requiring `simla logs`.
+	go runtime.StreamStartupLogs(ctx, containerID, 3*time.Second)
 
 	// Mark service as running and healthy
 	s.registry.UpdateStatus(ctx, serviceName, registry.StatusRunning)

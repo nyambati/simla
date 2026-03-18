@@ -4,6 +4,7 @@ package runtime
 import (
 	"context"
 	"io"
+	"time"
 
 	"github.com/docker/docker/client"
 	"github.com/nyambati/simla/internal/registry"
@@ -33,4 +34,8 @@ type RuntimeInterface interface {
 	StopContainer(ctx context.Context, containerID string) error
 	DeleteContainer(ctx context.Context, containerID string) error
 	GetLogs(ctx context.Context, containerID string, follow bool) (io.ReadCloser, error)
+	// StreamStartupLogs tails container logs for the given window duration and
+	// emits each line as a structured log entry. It is a best-effort helper
+	// called after StartContainer to surface early crash messages.
+	StreamStartupLogs(ctx context.Context, containerID string, window time.Duration)
 }

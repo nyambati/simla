@@ -1,12 +1,14 @@
 package runtime
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"io"
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
@@ -33,6 +35,44 @@ func (r *Runtime) GetLogs(ctx context.Context, containerID string, follow bool) 
 		Follow:     follow,
 		Timestamps: true,
 	})
+}
+
+// StreamStartupLogs reads already-buffered container logs and emits each line
+// as a structured log entry. It does not follow the stream (Follow: false) so
+// it returns quickly after draining whatever the container has written so far.
+//
+// It is best-effort: errors opening or reading the stream are logged and
+// ignored so they never block the StartService path.
+func (r *Runtime) StreamStartupLogs(ctx context.Context, containerID string, _ time.Duration) {
+	shortID := containerID
+	if len(shortID) > 12 {
+		shortID = shortID[:12]
+	}
+
+	reader, err := r.client.ContainerLogs(ctx, containerID, container.LogsOptions{
+		ShowStdout: true,
+		ShowStderr: true,
+		Follow:     false,
+		Timestamps: false,
+	})
+	if err != nil {
+		r.logger.WithError(err).Warn("could not open startup log stream")
+		return
+	}
+	defer reader.Close()
+
+	logger := r.logger.WithField("container_id", shortID)
+	scanner := bufio.NewScanner(reader)
+	for scanner.Scan() {
+		line := scanner.Text()
+		// Docker multiplexed log frames carry an 8-byte binary header; strip it.
+		if len(line) > 8 {
+			line = line[8:]
+		}
+		if trimmed := strings.TrimSpace(line); trimmed != "" {
+			logger.Info("[container] " + trimmed)
+		}
+	}
 }
 
 const (

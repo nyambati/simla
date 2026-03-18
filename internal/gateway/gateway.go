@@ -13,6 +13,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/aws/aws-lambda-go/events"
+	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 
 	"github.com/nyambati/simla/internal/config"
@@ -52,49 +53,116 @@ func (g *APIGateway) Start(ctx context.Context) error {
 func (g *APIGateway) handleRequest(route config.Route) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
+
+		// Generate a request ID and attach it to every inbound request so it
+		// can be correlated across logs, the Lambda event, and the response.
+		requestID := uuid.NewString()
 		logger := g.logger.WithFields(logrus.Fields{
-			"path":   r.URL.Path,
-			"method": r.Method,
+			"path":       r.URL.Path,
+			"method":     r.Method,
+			"request_id": requestID,
 		})
 
 		if r.Method != route.Method {
-			logger.Warnf("unsuported method: expected=%s, got=%s", route.Method, r.Method)
+			logger.Warnf("unsupported method: expected=%s, got=%s", route.Method, r.Method)
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
 
-		logger.Info("recieved request for service")
+		logger.Info("received request for service")
 
 		defer r.Body.Close()
 
-		body, err := g.buildAPIGatewayEvent(r)
+		body, err := g.buildAPIGatewayEvent(r, requestID)
 		if err != nil {
+			logger.WithError(err).Error("failed to build api gateway event")
 			http.Error(w, "failed to build api gateway request", http.StatusBadRequest)
 			return
 		}
-		// Prepare context with timeout
+
+		// Prepare context with timeout and service name for downstream tracing.
 		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 		defer cancel()
-
-		// Set service name in context (for tracing)
 		ctx = context.WithValue(ctx, "service", route.Service)
 
-		// Invoke service through scheduler
+		// Invoke the Lambda through the scheduler.
 		response, err := g.scheduler.Invoke(ctx, route.Service, body)
 		if err != nil {
-			g.logger.WithError(err).Error("failed to invoke service")
-			http.Error(w, "failed to process request", http.StatusBadGateway)
+			logger.WithError(err).Error("failed to invoke service")
+			writeJSONError(w, http.StatusBadGateway, err.Error(), requestID)
 			return
 		}
 
-		// Success - write response
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_, _ = io.Copy(w, bytes.NewReader(response))
+		// Attempt to interpret the response as a full APIGatewayV2HTTPResponse.
+		// If the Lambda returned one, honour its status code, headers, and body.
+		// Otherwise fall back to a plain 200 with the raw bytes as the body.
+		if err := writePassthroughResponse(w, response, requestID); err != nil {
+			// Not an APIGatewayV2HTTPResponse — write raw bytes at 200.
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("X-Request-ID", requestID)
+			w.WriteHeader(http.StatusOK)
+			_, _ = io.Copy(w, bytes.NewReader(response))
+		}
 
-		duration := time.Since(start)
-		g.logger.WithField("duration", duration).Info("successfully routed request")
+		logger.WithField("duration", time.Since(start)).Info("successfully routed request")
 	}
+}
+
+// writePassthroughResponse tries to unmarshal body as events.APIGatewayV2HTTPResponse.
+// It returns an error if the body is not a valid response structure (so the
+// caller can fall back to a raw write). A valid response must have a non-zero
+// StatusCode field.
+func writePassthroughResponse(w http.ResponseWriter, body []byte, requestID string) error {
+	var resp events.APIGatewayV2HTTPResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return err
+	}
+	if resp.StatusCode == 0 {
+		return fmt.Errorf("not an APIGatewayV2HTTPResponse: StatusCode is 0")
+	}
+
+	// Copy headers from the Lambda response.
+	for k, v := range resp.Headers {
+		w.Header().Set(k, v)
+	}
+	for k, vs := range resp.MultiValueHeaders {
+		for _, v := range vs {
+			w.Header().Add(k, v)
+		}
+	}
+	w.Header().Set("X-Request-ID", requestID)
+
+	// Default content-type if the Lambda didn't set one.
+	if w.Header().Get("Content-Type") == "" {
+		w.Header().Set("Content-Type", "application/json")
+	}
+
+	w.WriteHeader(resp.StatusCode)
+
+	if resp.Body != "" {
+		var bodyBytes []byte
+		if resp.IsBase64Encoded {
+			var err error
+			bodyBytes, err = base64.StdEncoding.DecodeString(resp.Body)
+			if err != nil {
+				return nil // headers already written; best effort
+			}
+		} else {
+			bodyBytes = []byte(resp.Body)
+		}
+		_, _ = w.Write(bodyBytes)
+	}
+
+	return nil
+}
+
+// writeJSONError writes a structured JSON error body with the given status code.
+func writeJSONError(w http.ResponseWriter, statusCode int, message string, requestID string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-ID", requestID)
+	w.WriteHeader(statusCode)
+	body, _ := json.Marshal(map[string]string{"error": message, "requestId": requestID})
+	_, _ = w.Write(body)
 }
 
 func (g *APIGateway) createHttpServer(ctx context.Context) error {
@@ -104,19 +172,19 @@ func (g *APIGateway) createHttpServer(ctx context.Context) error {
 	}
 
 	go func() {
-		if err := server.ListenAndServe(); err != nil {
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			g.logger.WithError(err).Fatal("failed to start gateway")
 		}
 	}()
 
 	<-ctx.Done()
-	g.logger.Info("shutting now API gateway")
+	g.logger.Info("shutting down API gateway")
 	shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	return server.Shutdown(shutdown)
 }
 
-func (g *APIGateway) buildAPIGatewayEvent(r *http.Request) ([]byte, error) {
+func (g *APIGateway) buildAPIGatewayEvent(r *http.Request, requestID string) ([]byte, error) {
 	routeKey := fmt.Sprintf("%s %s", r.Method, r.URL.Path)
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -128,13 +196,14 @@ func (g *APIGateway) buildAPIGatewayEvent(r *http.Request) ([]byte, error) {
 		RouteKey:       routeKey,
 		RawPath:        r.URL.Path,
 		RawQueryString: r.URL.RawQuery,
-		Headers:        extractHeaders(r),
+		Headers:        extractHeaders(r, requestID),
 		Cookies:        extractCookies(r),
 		RequestContext: events.APIGatewayV2HTTPRequestContext{
 			RouteKey:   routeKey,
 			AccountID:  "012345678901",
 			Stage:      g.config.Stage,
-			Time:       time.Now().String(),
+			RequestID:  requestID,
+			Time:       time.Now().Format(time.RFC3339),
 			Authorizer: &events.APIGatewayV2HTTPRequestContextAuthorizerDescription{},
 			HTTP: events.APIGatewayV2HTTPRequestContextHTTPDescription{
 				Method:    r.Method,
@@ -149,21 +218,19 @@ func (g *APIGateway) buildAPIGatewayEvent(r *http.Request) ([]byte, error) {
 		IsBase64Encoded: !utf8.Valid(body),
 	}
 
-	bytes, err := json.Marshal(event)
-	if err != nil {
-		return nil, err
-	}
-
-	return bytes, nil
+	return json.Marshal(event)
 }
 
-func extractHeaders(r *http.Request) map[string]string {
+// extractHeaders collects the first value of every request header and injects
+// the X-Request-ID so Lambdas can read it from event.Headers.
+func extractHeaders(r *http.Request, requestID string) map[string]string {
 	headers := make(map[string]string)
 	for key, values := range r.Header {
 		if len(values) > 0 {
 			headers[key] = values[0]
 		}
 	}
+	headers["X-Request-ID"] = requestID
 	return headers
 }
 
@@ -185,23 +252,18 @@ func (g *APIGateway) handleHealthCheck() http.HandlerFunc {
 func (g *APIGateway) loggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
-
-		next.ServeHTTP(w, r) // Call the next handler
-
-		duration := time.Since(start)
-
+		next.ServeHTTP(w, r)
 		g.logger.WithFields(logrus.Fields{
 			"method":     r.Method,
 			"path":       r.URL.Path,
 			"remoteAddr": r.RemoteAddr,
-			"duration":   duration,
+			"duration":   time.Since(start),
 		}).Info("handled request")
 	})
 }
 
 // bodyString returns body as a plain string when it is valid UTF-8, or as a
-// base64-encoded string otherwise. IsBase64Encoded in the event is set to
-// !utf8.Valid(body) so the Lambda can decode accordingly.
+// base64-encoded string otherwise.
 func bodyString(body []byte) string {
 	if utf8.Valid(body) {
 		return string(body)
