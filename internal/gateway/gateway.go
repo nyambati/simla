@@ -96,7 +96,7 @@ func (g *APIGateway) handleRequest(route config.Route) http.HandlerFunc {
 		// Attempt to interpret the response as a full APIGatewayV2HTTPResponse.
 		// If the Lambda returned one, honour its status code, headers, and body.
 		// Otherwise fall back to a plain 200 with the raw bytes as the body.
-		if err := writePassthroughResponse(w, response, requestID); err != nil {
+		if err := writePassthroughResponse(w, response, requestID, logger); err != nil {
 			// Not an APIGatewayV2HTTPResponse — write raw bytes at 200.
 			w.Header().Set("Content-Type", "application/json")
 			w.Header().Set("X-Request-ID", requestID)
@@ -112,7 +112,7 @@ func (g *APIGateway) handleRequest(route config.Route) http.HandlerFunc {
 // It returns an error if the body is not a valid response structure (so the
 // caller can fall back to a raw write). A valid response must have a non-zero
 // StatusCode field.
-func writePassthroughResponse(w http.ResponseWriter, body []byte, requestID string) error {
+func writePassthroughResponse(w http.ResponseWriter, body []byte, requestID string, logger *logrus.Entry) error {
 	var resp events.APIGatewayV2HTTPResponse
 	if err := json.Unmarshal(body, &resp); err != nil {
 		return err
@@ -121,15 +121,22 @@ func writePassthroughResponse(w http.ResponseWriter, body []byte, requestID stri
 		return fmt.Errorf("not an APIGatewayV2HTTPResponse: StatusCode is 0")
 	}
 
-	// Copy headers from the Lambda response.
+	// Copy single-value headers from the Lambda response.
 	for k, v := range resp.Headers {
 		w.Header().Set(k, v)
 	}
+	// Copy multi-value headers (these take precedence over single-value for
+	// the same key per the AWS spec).
 	for k, vs := range resp.MultiValueHeaders {
 		for _, v := range vs {
 			w.Header().Add(k, v)
 		}
 	}
+	// Forward cookies the Lambda set via the Cookies field.
+	for _, c := range resp.Cookies {
+		w.Header().Add("Set-Cookie", c)
+	}
+
 	w.Header().Set("X-Request-ID", requestID)
 
 	// Default content-type if the Lambda didn't set one.
@@ -145,7 +152,11 @@ func writePassthroughResponse(w http.ResponseWriter, body []byte, requestID stri
 			var err error
 			bodyBytes, err = base64.StdEncoding.DecodeString(resp.Body)
 			if err != nil {
-				return nil // headers already written; best effort
+				// Headers are already written; log the failure so it is
+				// observable, but do not surface it as an error to the caller
+				// (WriteHeader has already been called, so no fallback is possible).
+				logger.WithError(err).Error("failed to base64-decode Lambda response body")
+				return nil
 			}
 		} else {
 			bodyBytes = []byte(resp.Body)

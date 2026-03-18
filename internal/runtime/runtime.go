@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -16,6 +17,7 @@ import (
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/errdefs"
+	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/docker/go-connections/nat"
 	"github.com/google/uuid"
 	simlaerrors "github.com/nyambati/simla/internal/errors"
@@ -61,15 +63,18 @@ func (r *Runtime) StreamStartupLogs(ctx context.Context, containerID string, _ t
 	}
 	defer reader.Close()
 
+	// Docker sends a multiplexed stream with an 8-byte binary header per frame.
+	// stdcopy.StdCopy correctly demultiplexes it before we scan individual lines,
+	// avoiding the fragile manual header-stripping of a raw bufio.Scanner.
+	var buf bytes.Buffer
+	if _, err := stdcopy.StdCopy(&buf, &buf, reader); err != nil && err != io.EOF {
+		r.logger.WithError(err).Warn("error reading startup log stream")
+	}
+
 	logger := r.logger.WithField("container_id", shortID)
-	scanner := bufio.NewScanner(reader)
+	scanner := bufio.NewScanner(&buf)
 	for scanner.Scan() {
-		line := scanner.Text()
-		// Docker multiplexed log frames carry an 8-byte binary header; strip it.
-		if len(line) > 8 {
-			line = line[8:]
-		}
-		if trimmed := strings.TrimSpace(line); trimmed != "" {
+		if trimmed := strings.TrimSpace(scanner.Text()); trimmed != "" {
 			logger.Info("[container] " + trimmed)
 		}
 	}

@@ -99,11 +99,14 @@ func (w *Watcher) Start(ctx context.Context) error {
 				continue
 			}
 
+			// fsnotify reports event.Name as the full path of the changed file.
+			// pathToService is keyed by the watched directory (the service codePath).
+			// The primary lookup uses the file's parent directory; the fallback
+			// handles the rare case where the watched path itself is the event target
+			// (e.g. an atomic rename of the directory entry).
 			dir := filepath.Dir(event.Name)
 			serviceName, found := pathToService[dir]
 			if !found {
-				// The event is for the watched dir itself (e.g. file inside it).
-				// Try matching the dir directly (fsnotify reports the full path).
 				serviceName, found = pathToService[event.Name]
 			}
 			if !found {
