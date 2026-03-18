@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 
 	simlaerrors "github.com/nyambati/simla/internal/errors"
@@ -15,10 +14,10 @@ import (
 
 var registryFile = "registry.yaml"
 
-func NewRegistry(logger *logrus.Entry) ServiceRegistryInterface {
+func NewRegistry(logger *logrus.Entry) (ServiceRegistryInterface, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		logger.WithError(err).Error("failed to get user home directory")
+		return nil, fmt.Errorf("failed to get user home directory: %w", err)
 	}
 	return &ServiceRegistry{
 		Services:          make(map[string]*Service),
@@ -27,7 +26,7 @@ func NewRegistry(logger *logrus.Entry) ServiceRegistryInterface {
 		logger:            logger.WithField("component", "registry"),
 		FilePath:          filepath.Join(home, ".simla", registryFile),
 		mutex:             &sync.RWMutex{},
-	}
+	}, nil
 }
 
 func (r *ServiceRegistry) Load(ctx context.Context) error {
@@ -40,7 +39,7 @@ func (r *ServiceRegistry) Load(ctx context.Context) error {
 	file, err := os.Open(r.FilePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			if err := os.MkdirAll(strings.TrimSuffix(r.FilePath, registryFile), 0755); err != nil {
+			if err := os.MkdirAll(filepath.Dir(r.FilePath), 0755); err != nil {
 				return fmt.Errorf("failed to create registry directory: %w", err)
 			}
 			r.Services = make(map[string]*Service)
@@ -63,6 +62,14 @@ func (r *ServiceRegistry) Load(ctx context.Context) error {
 
 	if r.Services == nil {
 		r.Services = make(map[string]*Service)
+	}
+
+	// Backfill Name for entries loaded from older registry files that predate
+	// the Name field.
+	for name, svc := range r.Services {
+		if svc.Name == "" {
+			svc.Name = name
+		}
 	}
 
 	logger.Info("loaded registry from file")
@@ -95,14 +102,20 @@ func (r *ServiceRegistry) AddService(ctx context.Context, serviceName string) (s
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 
+	// Return the existing entry without a disk write — the service is already
+	// registered and its port is stable.
+	if existing, exists := r.Services[serviceName]; exists {
+		return existing, nil
+	}
+
 	r.logger.Infof("adding service %s to registry", serviceName)
 
-	port, err := r.allocateServicePort(ctx, serviceName)
+	port, err := r.allocateServicePort(serviceName)
 	if err != nil {
 		return nil, err
 	}
 
-	svc = &Service{Port: port, Status: StatusPending}
+	svc = &Service{Name: serviceName, Port: port, Status: StatusPending}
 	r.Services[serviceName] = svc
 
 	if err := r.Save(ctx); err != nil {
@@ -113,16 +126,25 @@ func (r *ServiceRegistry) AddService(ctx context.Context, serviceName string) (s
 }
 
 func (r *ServiceRegistry) GetService(ctx context.Context, name string) (svc *Service, exists bool) {
-	if service, exists := r.Services[name]; exists {
-		r.logger.Infof("found service %s found in registry", name)
-		return service, true
+	r.mutex.RLock()
+	defer r.mutex.RUnlock()
+	service, exists := r.Services[name]
+	if !exists {
+		r.logger.Warn(simlaerrors.NewServiceNotFoundError(name).Error())
 	}
-	r.logger.Warn(simlaerrors.NewServiceNotFoundError(name).Error())
-	return r.Services[name], false
+	return service, exists
 }
 
-func (r *ServiceRegistry) allocateServicePort(ctx context.Context, serviceName string) (port int, err error) {
-	if service, exists := r.GetService(ctx, serviceName); exists {
+func (r *ServiceRegistry) getService(name string) (*Service, bool) {
+	service, exists := r.Services[name]
+	if !exists {
+		r.logger.Warn(simlaerrors.NewServiceNotFoundError(name).Error())
+	}
+	return service, exists
+}
+
+func (r *ServiceRegistry) allocateServicePort(serviceName string) (port int, err error) {
+	if service, exists := r.getService(serviceName); exists {
 		logrus.Warnf("service %s already exists in registry", serviceName)
 		return service.Port, nil
 	}
@@ -144,22 +166,32 @@ func (r *ServiceRegistry) ListServices(ctx context.Context) []*Service {
 func (r *ServiceRegistry) UpdateStatus(ctx context.Context, name string, status Status) {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
-	r.Services[name].Status = status
+	svc, exists := r.Services[name]
+	if !exists {
+		r.logger.Warnf("UpdateStatus: service %s not found in registry", name)
+		return
+	}
+	svc.Status = status
 }
 
 func (r *ServiceRegistry) UpdateHealth(ctx context.Context, name string, healthy bool) {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
-	r.Services[name].Healthy = healthy
+	svc, exists := r.Services[name]
+	if !exists {
+		r.logger.Warnf("UpdateHealth: service %s not found in registry", name)
+		return
+	}
+	svc.Healthy = healthy
 }
 
 func (r *ServiceRegistry) UpdateContainerID(ctx context.Context, serviceName, containerID string) error {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
-	if service, exists := r.GetService(ctx, serviceName); exists {
+	if service, exists := r.getService(serviceName); exists {
 		service.ID = containerID
 		r.Services[serviceName] = service
+		return r.Save(ctx)
 	}
-	r.Services[serviceName].ID = containerID
-	return r.Save(ctx)
+	return simlaerrors.NewServiceNotFoundError(serviceName)
 }

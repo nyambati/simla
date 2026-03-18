@@ -3,6 +3,7 @@ package runtime
 
 import (
 	"context"
+	"io"
 
 	"github.com/docker/docker/client"
 	"github.com/nyambati/simla/internal/registry"
@@ -31,4 +32,5 @@ type RuntimeInterface interface {
 	StartContainer(ctx context.Context, config *RuntimeConfig) (containerID string, err error)
 	StopContainer(ctx context.Context, containerID string) error
 	DeleteContainer(ctx context.Context, containerID string) error
+	GetLogs(ctx context.Context, containerID string, follow bool) (io.ReadCloser, error)
 }

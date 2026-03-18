@@ -27,6 +27,15 @@ var cfg = &config.Config{
 			Cmd:      []string{"main"},
 			CodePath: "../../bin",
 		},
+		"test-python": {
+			Image:        "public.ecr.aws/lambda/python:3.13",
+			Architecture: "amd64",
+			Environment: map[string]string{
+				"TEST_ENV": "test",
+			},
+			Cmd:      []string{"main.handler"},
+			CodePath: "../../examples/python",
+		},
 	},
 }
 
@@ -71,6 +80,26 @@ func TestScheduler_Invoke(t *testing.T) {
 				payload:     "Simla",
 			},
 			want:    "SyntaxError",
+			wantErr: false,
+		},
+		{
+			name: "TestInvokePythonValidService",
+			args: args{
+				serviceName: "test-python",
+				port:        9003,
+				payload:     `{"name": "Simla"}`,
+			},
+			want:    "Simla",
+			wantErr: false,
+		},
+		{
+			name: "TestInvokePythonInvalidPayload",
+			args: args{
+				serviceName: "test-python",
+				port:        9003,
+				payload:     "Simla",
+			},
+			want:    "Error",
 			wantErr: false,
 		},
 	}

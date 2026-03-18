@@ -71,7 +71,7 @@ type HealthCheckFailedError struct {
 }
 
 func NewHeathCheckFailedError(name string, reason string) error {
-	return &HealthCheckFailedError{ServiceName: name}
+	return &HealthCheckFailedError{ServiceName: name, Reason: reason}
 }
 
 func (e *HealthCheckFailedError) Error() string {

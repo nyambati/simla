@@ -20,6 +20,7 @@ const (
 
 type Service struct {
 	ID           string    `yaml:"id"`
+	Name         string    `yaml:"name"`
 	Port         int       `yaml:"port"`
 	Status       Status    `yaml:"-"`
 	Healthy      bool      `yaml:"-"`

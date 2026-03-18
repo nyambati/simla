@@ -26,6 +26,7 @@ type SchedulerInterface interface {
 	Invoke(ctx context.Context, serviceName string, payload []byte) ([]byte, error)
 	StartService(ctx context.Context, serviceName string) error
 	StopService(ctx context.Context, serviceName string) error
+	StopAll(ctx context.Context) error
 }
 
 type Router struct {

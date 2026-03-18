@@ -137,6 +137,19 @@ func (s *Scheduler) StartService(ctx context.Context, serviceName string) error 
 	return nil
 }
 
+func (s *Scheduler) StopAll(ctx context.Context) error {
+	services := s.registry.ListServices(ctx)
+	for _, svc := range services {
+		if svc.Status != registry.StatusRunning {
+			continue
+		}
+		if err := s.StopService(ctx, svc.Name); err != nil {
+			s.logger.WithError(err).Warnf("failed to stop service %s during StopAll", svc.Name)
+		}
+	}
+	return nil
+}
+
 func (s *Scheduler) StopService(ctx context.Context, serviceName string) error {
 	logger := s.logger.WithField("service", serviceName)
 

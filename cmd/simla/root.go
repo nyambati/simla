@@ -5,9 +5,12 @@ package simla
 
 import (
 	"context"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/nyambati/simla/internal/config"
-	reg "github.com/nyambati/simla/internal/registry"
+	"github.com/nyambati/simla/internal/registry"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -15,8 +18,11 @@ import (
 
 var cfg *config.Config
 var logger *logrus.Logger
-var svcRegistry *reg.ServiceRegistry
-var ctx = context.Background()
+var svcRegistry *registry.ServiceRegistry
+
+// ctx is a signal-aware context. It is cancelled when the process receives
+// SIGINT or SIGTERM, triggering graceful shutdown across all subcommands.
+var ctx, stopCtx = signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -26,7 +32,9 @@ var rootCmd = &cobra.Command{
 		if err := loadConfig(); err != nil {
 			logrus.WithError(err).Fatal("failed to load simla config")
 		}
-		svcRegistry.Load(ctx)
+		if err := svcRegistry.Load(ctx); err != nil {
+			logrus.WithError(err).Fatal("failed to load registry")
+		}
 	},
 }
 
@@ -39,7 +47,12 @@ func Execute() {
 func init() {
 	logger = logrus.New()
 	logger.SetFormatter(&logrus.TextFormatter{FullTimestamp: true})
-	svcRegistry = reg.NewRegistry(logger.WithField("component", "registry")).(*reg.ServiceRegistry)
+	reg, err := registry.NewRegistry(logger.WithField("component", "registry"))
+	if err != nil {
+		logrus.Fatal(err)
+	}
+	svcRegistry = reg.(*registry.ServiceRegistry)
+
 }
 
 func loadConfig() error {

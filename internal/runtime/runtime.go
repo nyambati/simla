@@ -22,6 +22,19 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// GetLogs returns a stream of combined stdout+stderr log output for the given
+// container. The caller is responsible for closing the returned ReadCloser.
+// When follow is true the stream stays open until the container stops or the
+// context is cancelled.
+func (r *Runtime) GetLogs(ctx context.Context, containerID string, follow bool) (io.ReadCloser, error) {
+	return r.client.ContainerLogs(ctx, containerID, container.LogsOptions{
+		ShowStdout: true,
+		ShowStderr: true,
+		Follow:     follow,
+		Timestamps: true,
+	})
+}
+
 const (
 	InternalPort = "8080"
 	OS           = "linux"

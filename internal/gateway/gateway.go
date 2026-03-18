@@ -3,12 +3,14 @@ package gateway
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"path/filepath"
 	"time"
+	"unicode/utf8"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/gorilla/mux"
@@ -143,8 +145,8 @@ func (g *APIGateway) buildAPIGatewayEvent(r *http.Request) ([]byte, error) {
 			},
 			Authentication: events.APIGatewayV2HTTPRequestContextAuthentication{},
 		},
-		Body:            string(body),
-		IsBase64Encoded: true,
+		Body:            bodyString(body),
+		IsBase64Encoded: !utf8.Valid(body),
 	}
 
 	bytes, err := json.Marshal(event)
@@ -168,7 +170,7 @@ func extractHeaders(r *http.Request) map[string]string {
 func extractCookies(r *http.Request) []string {
 	cookies := []string{}
 	for _, cookie := range r.Cookies() {
-		cookies = append(cookies, cookie.Value)
+		cookies = append(cookies, cookie.Name+"="+cookie.Value)
 	}
 	return cookies
 }
@@ -195,6 +197,16 @@ func (g *APIGateway) loggingMiddleware(next http.Handler) http.Handler {
 			"duration":   duration,
 		}).Info("handled request")
 	})
+}
+
+// bodyString returns body as a plain string when it is valid UTF-8, or as a
+// base64-encoded string otherwise. IsBase64Encoded in the event is set to
+// !utf8.Valid(body) so the Lambda can decode accordingly.
+func bodyString(body []byte) string {
+	if utf8.Valid(body) {
+		return string(body)
+	}
+	return base64.StdEncoding.EncodeToString(body)
 }
 
 func formatRoutePath(stage, routePath string) string {

@@ -109,6 +109,20 @@ func (mr *MockSchedulerInterfaceMockRecorder) StartService(ctx, serviceName any)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartService", reflect.TypeOf((*MockSchedulerInterface)(nil).StartService), ctx, serviceName)
 }
 
+// StopAll mocks base method.
+func (m *MockSchedulerInterface) StopAll(ctx context.Context) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "StopAll", ctx)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// StopAll indicates an expected call of StopAll.
+func (mr *MockSchedulerInterfaceMockRecorder) StopAll(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StopAll", reflect.TypeOf((*MockSchedulerInterface)(nil).StopAll), ctx)
+}
+
 // StopService mocks base method.
 func (m *MockSchedulerInterface) StopService(ctx context.Context, serviceName string) error {
 	m.ctrl.T.Helper()

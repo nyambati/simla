@@ -11,6 +11,7 @@ package mocks
 
 import (
 	context "context"
+	io "io"
 	reflect "reflect"
 
 	runtime "github.com/nyambati/simla/internal/runtime"
@@ -53,6 +54,21 @@ func (m *MockRuntimeInterface) DeleteContainer(ctx context.Context, containerID 
 func (mr *MockRuntimeInterfaceMockRecorder) DeleteContainer(ctx, containerID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteContainer", reflect.TypeOf((*MockRuntimeInterface)(nil).DeleteContainer), ctx, containerID)
+}
+
+// GetLogs mocks base method.
+func (m *MockRuntimeInterface) GetLogs(ctx context.Context, containerID string, follow bool) (io.ReadCloser, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetLogs", ctx, containerID, follow)
+	ret0, _ := ret[0].(io.ReadCloser)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetLogs indicates an expected call of GetLogs.
+func (mr *MockRuntimeInterfaceMockRecorder) GetLogs(ctx, containerID, follow any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLogs", reflect.TypeOf((*MockRuntimeInterface)(nil).GetLogs), ctx, containerID, follow)
 }
 
 // StartContainer mocks base method.

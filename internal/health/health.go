@@ -52,7 +52,10 @@ func (hc *HealthChecker) IsHealthy(ctx context.Context, svc *registry.Service) (
 }
 
 func (hc *HealthChecker) WaitForHealthy(ctx context.Context, svc *registry.Service) error {
-	serviceName := ctx.Value("service").(string)
+	serviceName, ok := ctx.Value("service").(string)
+	if !ok {
+		return simlaerrors.NewTimeoutError("unknown")
+	}
 	log := hc.logger.WithField("service", serviceName)
 
 	timeoutCtx, cancel := context.WithTimeout(ctx, hc.timeout)
