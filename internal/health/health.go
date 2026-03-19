@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	simlaerrors "github.com/nyambati/simla/internal/errors"
@@ -28,7 +29,12 @@ func (hc *HealthChecker) IsHealthy(ctx context.Context, svc *registry.Service) (
 		return false, simlaerrors.NewHeathCheckFailedError("unknown", "service name not found in context")
 	}
 
-	url := fmt.Sprintf(healthCheckEndpoint, strconv.Itoa(svc.Port))
+	var url string
+	if strings.Contains(healthCheckEndpoint, "%") {
+		url = fmt.Sprintf(healthCheckEndpoint, strconv.Itoa(svc.Port))
+	} else {
+		url = healthCheckEndpoint
+	}
 	log := hc.logger.WithFields(logrus.Fields{"service": serviceName, "url": url})
 	log.Info("performing health check")
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)

@@ -51,6 +51,7 @@ func (r *ServiceRegistry) Load(ctx context.Context) error {
 	defer file.Close()
 
 	decoder := yaml.NewDecoder(file)
+	decoder.KnownFields(true)
 
 	temp := &ServiceRegistry{}
 	if err := decoder.Decode(temp); err != nil {
