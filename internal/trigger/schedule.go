@@ -103,7 +103,7 @@ func parseRate(inner string) (time.Duration, error) {
 	if err != nil || n <= 0 {
 		return 0, fmt.Errorf("rate value must be a positive integer, got %q", parts[0])
 	}
-	unit := strings.ToLower(strings.TrimSuffix(strings.TrimSuffix(parts[1], "s"), ""))
+	unit := strings.ToLower(parts[1])
 	switch unit {
 	case "minute", "minutes":
 		return time.Duration(n) * time.Minute, nil

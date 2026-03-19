@@ -9,7 +9,6 @@ import (
 	"github.com/nyambati/simla/internal/config"
 	"github.com/nyambati/simla/internal/health"
 	"github.com/nyambati/simla/internal/registry"
-	"github.com/nyambati/simla/internal/runtime"
 	"github.com/sirupsen/logrus"
 )
 
@@ -40,5 +39,4 @@ type Scheduler struct {
 	router   RouterInterface
 	logger   *logrus.Entry
 	config   *config.Config
-	runtime  runtime.RuntimeInterface
 }

@@ -281,7 +281,3 @@ func bodyString(body []byte) string {
 	}
 	return base64.StdEncoding.EncodeToString(body)
 }
-
-func formatRoutePath(stage, routePath string) string {
-	return fmt.Sprintf("%s/%s", stage, routePath)
-}
