@@ -10,4 +10,4 @@ ptest: generate build_test
 	@gotestsum --format=testname
 
 build_test:
-	GOOS=linux GOARCH=amd64 go build -o bin/main examples/go/main.go
+	GOOS=linux go build -o bin/main examples/go/main.go

@@ -30,3 +30,6 @@ bin/
 __pycache__/
 *.pyc
 *.pyo
+
+# Security recommendations
+recommendations.md
