@@ -115,3 +115,61 @@ func (e *RegistrySaveError) Error() string {
 func NewRegistrySaveError(reason string) error {
 	return &RegistrySaveError{Reason: reason}
 }
+
+// Workflow errors
+
+type WorkflowNotFoundError struct {
+	WorkflowName string
+}
+
+func NewWorkflowNotFoundError(name string) error {
+	return &WorkflowNotFoundError{WorkflowName: name}
+}
+
+func (e *WorkflowNotFoundError) Error() string {
+	return fmt.Sprintf("workflow %s not found", e.WorkflowName)
+}
+
+type WorkflowStateError struct {
+	WorkflowName string
+	StateName    string
+	Cause        string
+}
+
+func NewWorkflowStateError(workflow, state, cause string) error {
+	return &WorkflowStateError{WorkflowName: workflow, StateName: state, Cause: cause}
+}
+
+func (e *WorkflowStateError) Error() string {
+	return fmt.Sprintf("workflow %s failed at state %s: %s", e.WorkflowName, e.StateName, e.Cause)
+}
+
+type WorkflowExecutionError struct {
+	WorkflowName string
+	Error_       string
+	Cause        string
+}
+
+func NewWorkflowExecutionError(workflow, errName, cause string) error {
+	return &WorkflowExecutionError{WorkflowName: workflow, Error_: errName, Cause: cause}
+}
+
+func (e *WorkflowExecutionError) Error() string {
+	return fmt.Sprintf("workflow %s execution failed (%s): %s", e.WorkflowName, e.Error_, e.Cause)
+}
+
+type WorkflowTimeoutError struct {
+	WorkflowName string
+	StateName    string
+}
+
+func NewWorkflowTimeoutError(workflow, state string) error {
+	return &WorkflowTimeoutError{WorkflowName: workflow, StateName: state}
+}
+
+func (e *WorkflowTimeoutError) Error() string {
+	if e.StateName != "" {
+		return fmt.Sprintf("workflow %s timed out at state %s", e.WorkflowName, e.StateName)
+	}
+	return fmt.Sprintf("workflow %s timed out", e.WorkflowName)
+}
