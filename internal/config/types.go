@@ -109,7 +109,8 @@ type APIGateway struct {
 }
 
 type Config struct {
-	APIGateway APIGateway         `yaml:"apiGateway"`
-	Services   map[string]Service `yaml:"services"`
-	Host       string             `yaml:"-"`
+	APIGateway APIGateway              `yaml:"apiGateway"`
+	Services   map[string]Service      `yaml:"services"`
+	Workflows  map[string]StateMachine `yaml:"workflows"`
+	Host       string                  `yaml:"-"`
 }
