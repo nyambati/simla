@@ -90,7 +90,8 @@ func (g *APIGateway) handleRequest(route config.Route) http.HandlerFunc {
 		}
 
 		// Prepare context with timeout and service name for downstream tracing.
-		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		// 5 minutes to accommodate cold-start container pulls on first invocation.
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
 		defer cancel()
 		ctx = context.WithValue(ctx, "service", route.Service)
 

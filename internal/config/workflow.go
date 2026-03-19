@@ -17,46 +17,46 @@ const (
 type StateType string
 
 type StateMachine struct {
-	Name    string           `yaml:"name"`
-	Comment string           `yaml:"comment"`
-	StartAt string           `yaml:"startAt"`
-	States  map[string]State `yaml:"states"`
-	Version string           `yaml:"version"`
+	Name    string           `yaml:"name"    mapstructure:"name"`
+	Comment string           `yaml:"comment" mapstructure:"comment"`
+	StartAt string           `yaml:"startAt" mapstructure:"startat"`
+	States  map[string]State `yaml:"states"  mapstructure:"states"`
+	Version string           `yaml:"version" mapstructure:"version"`
 }
 
 type State struct {
-	Type string `yaml:"Type"`
+	Type string `yaml:"type" mapstructure:"type"`
 
-	Next    string `yaml:"Next"`
-	End     bool   `yaml:"End"`
-	Comment string `yaml:"comment"`
+	Next    string `yaml:"next"    mapstructure:"next"`
+	End     bool   `yaml:"end"     mapstructure:"end"`
+	Comment string `yaml:"comment" mapstructure:"comment"`
 
-	Resource string `yaml:"resource"`
+	Resource string `yaml:"resource" mapstructure:"resource"`
 
-	InputPath  string `yaml:"inputPath"`
-	OutputPath string `yaml:"outputPath"`
-	ResultPath string `yaml:"resultPath"`
-	Result     any    `yaml:"result"`
+	InputPath  string `yaml:"inputPath"  mapstructure:"inputpath"`
+	OutputPath string `yaml:"outputPath" mapstructure:"outputpath"`
+	ResultPath string `yaml:"resultPath" mapstructure:"resultpath"`
+	Result     any    `yaml:"result"     mapstructure:"result"`
 
-	TimeoutSeconds   int `yaml:"timeoutSeconds"`
-	HeartbeatSeconds int `yaml:"heartbeatSeconds"`
+	TimeoutSeconds   int `yaml:"timeoutSeconds"   mapstructure:"timeoutseconds"`
+	HeartbeatSeconds int `yaml:"heartbeatSeconds" mapstructure:"heartbeatseconds"`
 
-	Retry []RetryConfig `yaml:"retry"`
-	Catch []CatchConfig `yaml:"catch"`
+	Retry []RetryConfig `yaml:"retry" mapstructure:"retry"`
+	Catch []CatchConfig `yaml:"catch" mapstructure:"catch"`
 
-	Branches []StateMachine `yaml:"branches"`
+	Branches []StateMachine `yaml:"branches" mapstructure:"branches"`
 
-	Choices       []ChoiceRule `yaml:"choices"`
-	DefaultChoice string       `yaml:"default"`
+	Choices       []ChoiceRule `yaml:"choices" mapstructure:"choices"`
+	DefaultChoice string       `yaml:"default" mapstructure:"default"`
 
-	Seconds       int    `yaml:"seconds"`
-	SecondsPath   string `yaml:"secondsPath"`
-	Timestamp     string `yaml:"timestamp"`
-	TimestampPath string `yaml:"timestampPath"`
+	Seconds       int    `yaml:"seconds"       mapstructure:"seconds"`
+	SecondsPath   string `yaml:"secondsPath"   mapstructure:"secondspath"`
+	Timestamp     string `yaml:"timestamp"     mapstructure:"timestamp"`
+	TimestampPath string `yaml:"timestampPath" mapstructure:"timestamppath"`
 
-	Error     string `yaml:"error"`
-	Cause     string `yaml:"cause"`
-	CausePath string `yaml:"causePath"`
+	Error     string `yaml:"error"      mapstructure:"error"`
+	Cause     string `yaml:"cause"      mapstructure:"cause"`
+	CausePath string `yaml:"causePath"  mapstructure:"causepath"`
 }
 
 type RetryConfig struct {
@@ -74,31 +74,31 @@ type CatchConfig struct {
 }
 
 type ChoiceRule struct {
-	Variable                 string       `yaml:"variable"`
-	StringEquals             string       `yaml:"stringEquals"`
-	StringLessThan           string       `yaml:"stringLessThan"`
-	StringGreaterThan        string       `yaml:"stringGreaterThan"`
-	StringLessThanEquals     string       `yaml:"stringLessThanEquals"`
-	StringGreaterThanEquals  string       `yaml:"stringGreaterThanEquals"`
-	StringMatches            string       `yaml:"stringMatches"`
-	NumericEquals            int          `yaml:"numericEquals"`
-	NumericLessThan          int          `yaml:"numericLessThan"`
-	NumericGreaterThan       int          `yaml:"numericGreaterThan"`
-	NumericLessThanEquals    int          `yaml:"numericLessThanEquals"`
-	NumericGreaterThanEquals int          `yaml:"numericGreaterThanEquals"`
-	NumericEqualsPath        string       `yaml:"numericEqualsPath"`
-	BooleanEquals            bool         `yaml:"booleanEquals"`
-	BooleanEqualsPath        string       `yaml:"booleanEqualsPath"`
-	IsNull                   bool         `yaml:"isNull"`
-	IsPresent                bool         `yaml:"isPresent"`
-	IsString                 bool         `yaml:"isString"`
-	IsNumeric                bool         `yaml:"isNumeric"`
-	IsBoolean                bool         `yaml:"isBoolean"`
-	IsTimestamp              bool         `yaml:"isTimestamp"`
-	And                      []ChoiceRule `yaml:"and"`
-	Or                       []ChoiceRule `yaml:"or"`
-	Not                      *ChoiceRule  `yaml:"not"`
-	Next                     string       `yaml:"next"`
+	Variable                 string       `yaml:"variable"                  mapstructure:"variable"`
+	StringEquals             string       `yaml:"stringEquals"              mapstructure:"stringequals"`
+	StringLessThan           string       `yaml:"stringLessThan"            mapstructure:"stringlessthan"`
+	StringGreaterThan        string       `yaml:"stringGreaterThan"         mapstructure:"stringgreaterthan"`
+	StringLessThanEquals     string       `yaml:"stringLessThanEquals"      mapstructure:"stringlessthanequals"`
+	StringGreaterThanEquals  string       `yaml:"stringGreaterThanEquals"   mapstructure:"stringgreaterthanequals"`
+	StringMatches            string       `yaml:"stringMatches"             mapstructure:"stringmatches"`
+	NumericEquals            int          `yaml:"numericEquals"             mapstructure:"numericequals"`
+	NumericLessThan          int          `yaml:"numericLessThan"           mapstructure:"numericlessthan"`
+	NumericGreaterThan       int          `yaml:"numericGreaterThan"        mapstructure:"numericgreaterthan"`
+	NumericLessThanEquals    int          `yaml:"numericLessThanEquals"     mapstructure:"numericlessthanequals"`
+	NumericGreaterThanEquals int          `yaml:"numericGreaterThanEquals"  mapstructure:"numericgreaterthanequals"`
+	NumericEqualsPath        string       `yaml:"numericEqualsPath"         mapstructure:"numericqualspath"`
+	BooleanEquals            bool         `yaml:"booleanEquals"             mapstructure:"booleanequals"`
+	BooleanEqualsPath        string       `yaml:"booleanEqualsPath"         mapstructure:"booleanqualspath"`
+	IsNull                   bool         `yaml:"isNull"      mapstructure:"isnull"`
+	IsPresent                bool         `yaml:"isPresent"   mapstructure:"ispresent"`
+	IsString                 bool         `yaml:"isString"    mapstructure:"isstring"`
+	IsNumeric                bool         `yaml:"isNumeric"   mapstructure:"isnumeric"`
+	IsBoolean                bool         `yaml:"isBoolean"   mapstructure:"isboolean"`
+	IsTimestamp              bool         `yaml:"isTimestamp" mapstructure:"istimestamp"`
+	And                      []ChoiceRule `yaml:"and"  mapstructure:"and"`
+	Or                       []ChoiceRule `yaml:"or"   mapstructure:"or"`
+	Not                      *ChoiceRule  `yaml:"not"  mapstructure:"not"`
+	Next                     string       `yaml:"next" mapstructure:"next"`
 }
 
 func (c *Config) GetWorkflow(ctx context.Context, workflowName string) (*StateMachine, bool) {

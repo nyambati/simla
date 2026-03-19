@@ -72,7 +72,9 @@ func (e *Executor) runMachine(ctx context.Context, sm *config.StateMachine, inpu
 		return nil, fmt.Errorf("state machine %q has no StartAt", sm.Name)
 	}
 
-	currentState := sm.StartAt
+	// Viper lowercases all YAML map keys, so normalise the start state name and
+	// all subsequent Next transitions to lowercase to match the stored keys.
+	currentState := strings.ToLower(sm.StartAt)
 	data := input
 
 	for {
@@ -100,7 +102,7 @@ func (e *Executor) runMachine(ctx context.Context, sm *config.StateMachine, inpu
 			return nil, simlaerrors.NewWorkflowStateError(sm.Name, currentState, "no Next defined and state is not terminal")
 		}
 
-		currentState = result.nextState
+		currentState = strings.ToLower(result.nextState)
 	}
 }
 

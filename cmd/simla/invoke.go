@@ -1,6 +1,7 @@
 package simla
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -38,7 +39,7 @@ If neither flag is provided, an empty JSON object {} is sent.`,
 		}
 
 		// Put service name in context so health checks and routing work correctly.
-		invokeCtx := cmd.Context()
+		invokeCtx := context.WithValue(cmd.Context(), "service", serviceName)
 
 		sched := scheduler.NewScheduler(cfg, svcRegistry, logger.WithField("component", "scheduler"))
 		response, err := sched.Invoke(invokeCtx, serviceName, payload)

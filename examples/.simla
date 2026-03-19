@@ -1,0 +1,158 @@
+apiGateway:
+  port: 8080
+  stage: v1
+  # CORS: enable cross-origin requests from any origin (phase 4).
+  # Set enabled: true and customise the remaining fields as needed.
+  cors:
+    enabled: true
+    allowOrigins: "*"
+    allowMethods: "GET,POST,PUT,PATCH,DELETE,OPTIONS"
+    allowHeaders: "Content-Type,Authorization,X-Request-ID"
+    allowCredentials: false
+    maxAge: 86400
+  routes:
+    - path: payments
+      method: GET
+      service: payments
+    - path: orders
+      method: POST
+      service: order-processor
+
+services:
+
+  # ── HTTP trigger (Go) ─────────────────────────────────────────────────────
+  # Receives events.APIGatewayV2HTTPRequest, returns a greeting.
+  # Build: GOOS=linux GOARCH=amd64 go build -o examples/bin/payments examples/go/main.go
+  #
+  # Phase 4 additions:
+  #   envFile      — load additional variables from a .env file; merged on top
+  #                  of environment and both support ${VAR} interpolation.
+  #   architecture — omit to auto-detect from the host (arm64 on Apple Silicon,
+  #                  amd64 otherwise). A mismatch triggers a QEMU warning.
+  payments:
+    runtime: go
+    architecture: amd64
+    environment:
+      TEST_ENV: test
+      API_BASE_URL: "http://localhost:8080"
+      CONFIG_DIR: "${HOME}/.config/payments"
+    codePath: ./bin
+    cmd: ["payments"]
+
+  # ── Schedule trigger (Go) ─────────────────────────────────────────────────
+  # Receives events.CloudWatchEvent on a fixed rate; runs periodic work.
+  # Build: GOOS=linux GOARCH=amd64 go build -o examples/bin/reconciler examples/go/schedule/main.go
+  reconciler:
+    runtime: go
+    architecture: amd64
+    codePath: ./bin
+    cmd: ["reconciler"]
+
+  # ── SQS trigger (Go) ─────────────────────────────────────────────────────
+  # Receives events.SQSEvent batches; returns partial batch failure report.
+  # Requires an SQS-compatible queue — e.g. ElasticMQ on localhost:9324.
+  # Build: GOOS=linux GOARCH=amd64 go build -o examples/bin/order-processor examples/go/sqs/main.go
+  order-processor:
+    runtime: go
+    architecture: amd64
+    codePath: ./bin
+    cmd: ["order-processor"]
+    # triggers:
+    #   - type: sqs
+    #     queueUrl: "http://localhost:9324/queue/orders"
+    #     batchSize: 5
+    #     pollingInterval: "2s"
+
+  # ── S3 trigger (Python) ──────────────────────────────────────────────────
+  # Receives events.S3Event when files appear/change in the watched directory.
+  image-processor:
+    image: public.ecr.aws/lambda/python:3.13
+    architecture: amd64
+    codePath: ./python/s3
+    cmd: ["main.handler"]
+    # triggers:
+    #   - type: s3
+    #     localPath: ./data/uploads
+    #     bucket: my-uploads-bucket
+    #     events:
+    #       - "s3:ObjectCreated:*"
+    #       - "s3:ObjectRemoved:*"
+
+  # ── SNS trigger (Python) ─────────────────────────────────────────────────
+  # Receives events.SNSEvent when a message is published to the topic.
+  # Publish a message: POST http://localhost:2772/publish
+  #   {"Message": "hello", "Subject": "test"}
+  notifier:
+    image: public.ecr.aws/lambda/python:3.13
+    architecture: amd64
+    codePath: ./python/sns
+    cmd: ["main.handler"]
+    # triggers:
+    #   - type: sns
+    #     topicArn: "arn:aws:sns:local:000000000000:notifications"
+    #     snsEndpointPort: 2772
+
+  # ── DynamoDB Streams trigger (Python) ────────────────────────────────────
+  # Receives events.DynamoDBEvent as records flow from the stream.
+  # Requires a local DynamoDB instance — e.g. DynamoDB Local on localhost:8000.
+  audit-logger:
+    image: public.ecr.aws/lambda/python:3.13
+    architecture: amd64
+    codePath: ./python/dynamodb
+    cmd: ["main.handler"]
+    # triggers:
+    #   - type: dynamodb-stream
+    #     streamArn: "arn:aws:dynamodb:local:000000000000:table/orders/stream/2024-01-01T00:00:00.000"
+    #     dynamodbEndpoint: "http://localhost:8000"
+    #     startingPosition: LATEST
+
+workflows:
+
+  # ── Simple linear workflow ────────────────────────────────────────────────
+  # Greets a user then reconciles — demonstrates sequential Task chaining
+  # with data flowing between steps via ResultPath.
+  #
+  # Run: simla workflow run greet-and-reconcile --input '{"name":"Alice"}' --pretty
+  greet-and-reconcile:
+    comment: "Greet a user then run the reconciler"
+    startAt: greet
+    states:
+      greet:
+        Type: Task
+        resource: payments
+        resultPath: "$.greeting"
+        next: reconcile
+      reconcile:
+        Type: Task
+        resource: reconciler
+        resultPath: "$.reconcile"
+        end: true
+
+  # ── Workflow with a Choice branch ────────────────────────────────────────
+  # Routes the request to different services based on the order size.
+  # - size >= 100  → order-processor (bulk path)
+  # - default      → payments       (standard path)
+  #
+  # Run: simla workflow run order-router --input '{"size":150,"name":"BigCo"}' --pretty
+  # Run: simla workflow run order-router --input '{"size":5,"name":"Alice"}' --pretty
+  order-router:
+    comment: "Route orders to bulk or standard processing"
+    startAt: route
+    states:
+      route:
+        Type: Choice
+        choices:
+          - variable: "$.size"
+            numericGreaterThanEquals: 100
+            next: bulkOrder
+        default: standardOrder
+      bulkOrder:
+        Type: Task
+        resource: order-processor
+        resultPath: "$.result"
+        end: true
+      standardOrder:
+        Type: Task
+        resource: payments
+        resultPath: "$.result"
+        end: true

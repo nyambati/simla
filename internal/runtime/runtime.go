@@ -187,9 +187,28 @@ func (r *Runtime) pullImage(ctx context.Context, imageName, arch string) error {
 		return fmt.Errorf("failed to list images: %w", err)
 	}
 
-	for _, image := range images {
-		if slices.Contains(image.RepoTags, imageName) {
-			return nil
+	for _, img := range images {
+		if slices.Contains(img.RepoTags, imageName) {
+			// Inspect to verify architecture so we don't reuse a cached image
+			// built for a different platform (e.g. amd64 when arm64 is needed).
+			inspect, _, err := r.client.ImageInspectWithRaw(ctx, img.ID)
+			if err != nil {
+				// Can't inspect — be conservative and try to pull anyway.
+				logger.WithError(err).Warn("could not inspect cached image; will re-pull")
+				break
+			}
+			cachedArch := NormArch(inspect.Architecture)
+			if cachedArch == arch {
+				return nil
+			}
+			// Architecture mismatch: remove the old image so the pull below
+			// replaces it with the correct platform variant.
+			logger.Warnf("cached image %s has architecture %s but %s is required; removing and re-pulling",
+				imageName, cachedArch, arch)
+			if _, removeErr := r.client.ImageRemove(ctx, img.ID, image.RemoveOptions{Force: true}); removeErr != nil {
+				logger.WithError(removeErr).Warn("failed to remove mismatched image; pull may still fail")
+			}
+			break
 		}
 	}
 
@@ -211,6 +230,7 @@ func (r *Runtime) pullImage(ctx context.Context, imageName, arch string) error {
 
 func (r *Runtime) createContainer(ctx context.Context, config *RuntimeConfig) (string, error) {
 	r.logger.Info("checking for dangling containers")
+
 	if err := r.CleanContainerEnvironment(ctx, config.Name); err != nil {
 		return "", fmt.Errorf("failed to clean container environment: %w", err)
 	}
