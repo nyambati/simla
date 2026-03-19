@@ -11,10 +11,20 @@ import (
 	"github.com/nyambati/simla/internal/config"
 	"github.com/nyambati/simla/internal/mocks"
 	"github.com/nyambati/simla/internal/registry"
+	"github.com/nyambati/simla/internal/runtime"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
 )
+
+// pythonImage returns the AWS Lambda Python base image appropriate for the
+// host architecture, avoiding QEMU emulation in CI and on Apple Silicon.
+func pythonImage() string {
+	if runtime.HostArch() == "arm64" {
+		return "public.ecr.aws/lambda/python:3.13-arm64"
+	}
+	return "public.ecr.aws/lambda/python:3.13"
+}
 
 var cfg = &config.Config{
 	Services: map[string]config.Service{
@@ -28,8 +38,8 @@ var cfg = &config.Config{
 			CodePath: "../../bin",
 		},
 		"test-python": {
-			Image:        "public.ecr.aws/lambda/python:3.13",
-			Architecture: "amd64",
+			Image:        pythonImage(),
+			Architecture: runtime.HostArch(),
 			Environment: map[string]string{
 				"TEST_ENV": "test",
 			},

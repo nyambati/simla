@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"time"
@@ -86,6 +87,30 @@ const (
 	NetworkName  = "simla-network"
 )
 
+// HostArch returns the architecture of the current host machine in the Docker
+// convention used by Lambda base images ("amd64" or "arm64").
+func HostArch() string {
+	switch runtime.GOARCH {
+	case "arm64":
+		return "arm64"
+	default:
+		return "amd64"
+	}
+}
+
+// NormArch canonicalises architecture strings to the Docker convention.
+// "x86_64" → "amd64", "aarch64" / "arm64" → "arm64".
+func NormArch(arch string) string {
+	switch strings.ToLower(arch) {
+	case "amd64", "x86_64":
+		return "amd64"
+	case "arm64", "aarch64":
+		return "arm64"
+	default:
+		return arch
+	}
+}
+
 func NewRuntime(registry registry.ServiceRegistryInterface, logger *logrus.Entry) (RuntimeInterface, error) {
 	client, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
@@ -109,6 +134,26 @@ func (r *Runtime) StartContainer(ctx context.Context, config *RuntimeConfig) (co
 
 	if config.Image == "" && config.Runtime != "" {
 		config.Image = inferImageFromRuntime(config.Runtime)
+	}
+
+	// Default to the host architecture when none is specified.
+	if config.Architecture == "" {
+		config.Architecture = HostArch()
+		r.logger.Debugf("architecture not set for service %s; defaulting to host arch %s",
+			config.Name, config.Architecture)
+	} else {
+		config.Architecture = NormArch(config.Architecture)
+	}
+
+	// Warn when running a cross-architecture image — QEMU emulation is slow
+	// and can cause intermittent failures.
+	if config.Architecture != HostArch() {
+		r.logger.Warnf(
+			"service %s requests architecture %s but host is %s — "+
+				"Docker will use QEMU emulation which is significantly slower and "+
+				"may cause intermittent failures; consider using a native image",
+			config.Name, config.Architecture, HostArch(),
+		)
 	}
 
 	if err = r.pullImage(ctx, config.Image, config.Architecture); err != nil {

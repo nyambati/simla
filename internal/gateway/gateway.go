@@ -37,6 +37,11 @@ func (g *APIGateway) Start(ctx context.Context) error {
 	g.router.HandleFunc(filepath.Join("/", g.config.Stage, "/health"), g.handleHealthCheck()).Methods(http.MethodGet)
 	g.router.Use(g.loggingMiddleware)
 
+	if g.config.CORS.Enabled {
+		g.logger.Info("CORS enabled")
+		g.router.Use(g.corsMiddleware)
+	}
+
 	for _, route := range g.config.Routes {
 		rPath := filepath.Join("/", g.config.Stage, route.Path)
 		fields := logrus.Fields{
@@ -46,6 +51,10 @@ func (g *APIGateway) Start(ctx context.Context) error {
 		}
 		g.logger.WithFields(fields).Info("registering route")
 		g.router.Methods(route.Method).Path(rPath).HandlerFunc(g.handleRequest(route))
+		// Register the OPTIONS preflight handler for every route when CORS is on.
+		if g.config.CORS.Enabled {
+			g.router.Methods(http.MethodOptions).Path(rPath).HandlerFunc(g.handlePreflight())
+		}
 	}
 	return g.createHttpServer(ctx)
 }
@@ -257,6 +266,50 @@ func (g *APIGateway) handleHealthCheck() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("OK"))
+	}
+}
+
+// corsDefaults fills in zero-value CORS fields with sensible defaults.
+func (g *APIGateway) corsDefaults() (origins, methods, headers string, maxAge int) {
+	origins = g.config.CORS.AllowOrigins
+	if origins == "" {
+		origins = "*"
+	}
+	methods = g.config.CORS.AllowMethods
+	if methods == "" {
+		methods = "GET,POST,PUT,PATCH,DELETE,OPTIONS"
+	}
+	headers = g.config.CORS.AllowHeaders
+	if headers == "" {
+		headers = "Content-Type,Authorization,X-Request-ID"
+	}
+	maxAge = g.config.CORS.MaxAge
+	if maxAge == 0 {
+		maxAge = 86400
+	}
+	return
+}
+
+// corsMiddleware adds Access-Control-* headers to every response.
+func (g *APIGateway) corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		origins, methods, headers, maxAge := g.corsDefaults()
+		w.Header().Set("Access-Control-Allow-Origin", origins)
+		w.Header().Set("Access-Control-Allow-Methods", methods)
+		w.Header().Set("Access-Control-Allow-Headers", headers)
+		w.Header().Set("Access-Control-Max-Age", fmt.Sprintf("%d", maxAge))
+		if g.config.CORS.AllowCredentials {
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// handlePreflight responds to OPTIONS requests with 204 No Content and all
+// required CORS headers already set by corsMiddleware.
+func (g *APIGateway) handlePreflight() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
 	}
 }
 

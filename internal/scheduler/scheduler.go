@@ -6,12 +6,18 @@ import (
 	"time"
 
 	"github.com/nyambati/simla/internal/config"
+	"github.com/nyambati/simla/internal/env"
 	simlaerrors "github.com/nyambati/simla/internal/errors"
 	"github.com/nyambati/simla/internal/health"
+	"github.com/nyambati/simla/internal/metrics"
 	"github.com/nyambati/simla/internal/registry"
 	"github.com/nyambati/simla/internal/runtime"
 	"github.com/sirupsen/logrus"
 )
+
+// GlobalMetrics is the process-wide invocation recorder. It is initialised
+// once on startup and read by the `simla status` command.
+var GlobalMetrics = metrics.NewRecorder()
 
 var _ SchedulerInterface = (*Scheduler)(nil)
 
@@ -59,17 +65,21 @@ func (s *Scheduler) Invoke(ctx context.Context, serviceName string, payload []by
 	// Set service name into context for Router
 	ctx = context.WithValue(ctx, "service", serviceName)
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-
 	defer cancel()
 
 	headers := map[string]string{}
-	// Call Router
+
+	start := time.Now()
 	response, statusCode, err := s.router.SendRequest(ctx, url, headers, payload)
+	elapsed := time.Since(start)
+
 	if err != nil {
+		GlobalMetrics.Record(serviceName, elapsed, true)
 		return nil, simlaerrors.NewServiceInvocationError(serviceName, statusCode, err.Error())
 	}
 
-	logger.Info("service invoked successfully")
+	GlobalMetrics.Record(serviceName, elapsed, false)
+	logger.WithField("latency", elapsed).Info("service invoked successfully")
 	return response, nil
 }
 
@@ -95,6 +105,16 @@ func (s *Scheduler) StartService(ctx context.Context, serviceName string) error 
 		return simlaerrors.NewServiceNotFoundError(serviceName)
 	}
 
+	// Resolve environment variables: merge inline map with optional .env file
+	// and expand ${VAR} placeholders against the host environment.
+	resolvedEnv, err := env.Resolve(svcCfg.Environment, svcCfg.EnvFile)
+	if err != nil {
+		logger.WithError(err).Warn("failed to resolve environment variables; using inline config only")
+		resolvedEnv = svcCfg.Environment
+	} else {
+		logger.WithField("env", env.Mask(resolvedEnv)).Debug("resolved service environment")
+	}
+
 	runtimeConfig := &runtime.RuntimeConfig{
 		Name:         serviceName,
 		Runtime:      svcCfg.Runtime,
@@ -103,7 +123,7 @@ func (s *Scheduler) StartService(ctx context.Context, serviceName string) error 
 		CodePath:     svcCfg.CodePath,
 		Cmd:          svcCfg.Cmd,
 		Entrypoint:   svcCfg.Entrypoint,
-		Environment:  svcCfg.Environment,
+		Environment:  resolvedEnv,
 		Port:         fmt.Sprintf("%d", service.Port),
 	}
 

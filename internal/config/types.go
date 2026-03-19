@@ -66,7 +66,11 @@ type Service struct {
 	Cmd          []string          `yaml:"cmd"`
 	Entrypoint   []string          `yaml:"entrypoint"`
 	Environment  map[string]string `yaml:"environment"`
-	Triggers     []Trigger         `yaml:"triggers"`
+	// EnvFile is a path to a .env file whose variables are merged on top of
+	// Environment. Values in both sources may use ${VAR} interpolation against
+	// the host environment.
+	EnvFile  string    `yaml:"envFile"`
+	Triggers []Trigger `yaml:"triggers"`
 }
 
 type Route struct {
@@ -75,10 +79,33 @@ type Route struct {
 	Method  string `yaml:"method"`
 }
 
+// CORSConfig controls cross-origin resource sharing headers added by the
+// gateway. Set Enabled: true to activate; all other fields have sensible
+// defaults.
+type CORSConfig struct {
+	// Enabled turns CORS headers on. When false the remaining fields are ignored.
+	Enabled bool `yaml:"enabled"`
+	// AllowOrigins is the value of Access-Control-Allow-Origin.
+	// Defaults to "*".
+	AllowOrigins string `yaml:"allowOrigins"`
+	// AllowMethods is the value of Access-Control-Allow-Methods.
+	// Defaults to "GET,POST,PUT,PATCH,DELETE,OPTIONS".
+	AllowMethods string `yaml:"allowMethods"`
+	// AllowHeaders is the value of Access-Control-Allow-Headers.
+	// Defaults to "Content-Type,Authorization,X-Request-ID".
+	AllowHeaders string `yaml:"allowHeaders"`
+	// AllowCredentials sets Access-Control-Allow-Credentials: true when enabled.
+	AllowCredentials bool `yaml:"allowCredentials"`
+	// MaxAge is the Access-Control-Max-Age value in seconds (preflight cache).
+	// Defaults to 86400 (24 h).
+	MaxAge int `yaml:"maxAge"`
+}
+
 type APIGateway struct {
-	Port   string  `yaml:"port"`
-	Routes []Route `yaml:"routes"`
-	Stage  string  `yaml:"stage"`
+	Port   string     `yaml:"port"`
+	Routes []Route    `yaml:"routes"`
+	Stage  string     `yaml:"stage"`
+	CORS   CORSConfig `yaml:"cors"`
 }
 
 type Config struct {
